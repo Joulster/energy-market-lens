@@ -21,6 +21,8 @@ app.use(express.static(distDir))
 
 const PORT = process.env.PORT || 3001
 
+app.get('/health', (req, res) => res.json({ ok: true }))
+
 app.get('/api/day-ahead-prices', async (req, res) => {
   try {
     const { startDate, endDate } = req.query
