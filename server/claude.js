@@ -134,7 +134,7 @@ export async function generateRegulatoryWatch(enabledSources, lookback, systemPr
     model: 'claude-sonnet-4-6',
     max_tokens: 4000,
     system: systemPrompt,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
     tool_choice: { type: 'any' },
     messages: [{ role: 'user', content: 'Search for regulatory developments now. Use targeted queries that include the current year and month names to find recent publications.' }],
   })
@@ -166,7 +166,7 @@ export async function generateCustomerSignals(sources, companies, topics, lookba
     model: 'claude-sonnet-4-6',
     max_tokens: 6000,
     system: systemPrompt,
-    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
+    tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 4 }],
     tool_choice: { type: 'any' },
     messages: [{ role: 'user', content: 'Search for customer signals now. Use targeted queries that include company names, the current year and month names to find recent publications.' }],
   })
