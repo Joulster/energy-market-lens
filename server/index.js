@@ -19,7 +19,7 @@ app.use(cors())
 app.use(express.json())
 app.use(express.static(distDir))
 
-const PORT = 3001
+const PORT = process.env.PORT || 3001
 
 app.get('/api/day-ahead-prices', async (req, res) => {
   try {
