@@ -88,11 +88,11 @@ app.post('/api/regulatory', async (req, res) => {
     const days = Number.isInteger(lookback) ? lookback : 90
 
     const fingerprint = JSON.stringify({ urls: enabledSources.map(s => s.url), days, prompt: systemPrompt ?? '' })
-    const hit = getCached('regulatory', fingerprint)
+    const hit = await getCached('regulatory', fingerprint)
     if (hit) return res.json({ ok: true, items: hit.items, fromCache: true, cachedAt: hit.cachedAt })
 
     const items = await generateRegulatoryWatch(enabledSources, days, systemPrompt)
-    setCached('regulatory', fingerprint, items)
+    await setCached('regulatory', fingerprint, items)
     res.json({ ok: true, items, fromCache: false, cachedAt: new Date().toISOString() })
   } catch (err) {
     console.error('regulatory error:', err.message)
@@ -109,11 +109,11 @@ app.post('/api/customer-signals', async (req, res) => {
     const days = Number.isInteger(lookback) ? lookback : 90
 
     const fingerprint = JSON.stringify({ urls: sources.map(s => s.url), companies, topics, days, prompt: systemPrompt ?? '' })
-    const hit = getCached('customer-signals', fingerprint)
+    const hit = await getCached('customer-signals', fingerprint)
     if (hit) return res.json({ ok: true, items: hit.items, fromCache: true, cachedAt: hit.cachedAt })
 
     const items = await generateCustomerSignals(sources, companies, topics, days, systemPrompt)
-    setCached('customer-signals', fingerprint, items)
+    await setCached('customer-signals', fingerprint, items)
     res.json({ ok: true, items, fromCache: false, cachedAt: new Date().toISOString() })
   } catch (err) {
     console.error('customer-signals error:', err.message)
