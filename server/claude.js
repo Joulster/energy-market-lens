@@ -131,7 +131,7 @@ export async function generateRegulatoryWatch(enabledSources, lookback, systemPr
     .replace(/\[SOURCE LIST\]/g, sourceList)
 
   const message = await getClient().messages.create({
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 4000,
     system: systemPrompt,
     tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
@@ -163,7 +163,7 @@ export async function generateCustomerSignals(sources, companies, topics, lookba
     .replace(/\[TOPIC LIST\]/g, topicList)
 
   const message = await getClient().messages.create({
-    model: 'claude-haiku-4-5',
+    model: 'claude-sonnet-4-6',
     max_tokens: 6000,
     system: systemPrompt,
     tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 8 }],
