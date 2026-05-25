@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const DEFAULT_SOURCES = [
   { id: 1, name: 'ACM (Dutch energy regulator)',    url: 'https://www.acm.nl/nl/onderwerpen/energie',            enabled: true },
@@ -19,11 +19,14 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
   const [newName, setNewName]           = useState('')
   const [newUrl, setNewUrl]             = useState('')
   const [items, setItems]               = useState(null)
-  const [loading, setLoading]           = useState(false)
+  const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
   const [lastUpdated, setLastUpdated]   = useState(null)
   const [fromCache, setFromCache]       = useState(false)
   const [showAll, setShowAll]           = useState(false)
+
+  // Auto-fetch on mount — cache hit is near-instant for repeat visits
+  useEffect(() => { handleRefresh() }, [])
 
   async function handleRefresh() {
     setLoading(true)
@@ -73,7 +76,7 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
         </div>
         <div className="reg-header-actions">
           <button className={`refresh-btn ${loading ? 'loading' : ''}`} onClick={handleRefresh} disabled={loading}>
-            {loading ? 'Searching…' : 'Refresh'}
+            {loading ? 'Searching…' : (error && !items) ? 'Retry' : 'Refresh'}
           </button>
           <button className={`gear-btn ${showSettings ? 'active' : ''}`} onClick={() => setShowSettings(v => !v)} title="Sources settings">
             ⚙
@@ -119,10 +122,6 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
       )}
 
       {error && <div className="narrative-error"><span className="error-icon">⚠</span> {error}</div>}
-
-      {!items && !loading && !error && (
-        <p className="narrative-empty">Click Refresh to search for recent regulatory developments across European energy markets.</p>
-      )}
 
       {loading && (
         <div className="narrative-loading">
