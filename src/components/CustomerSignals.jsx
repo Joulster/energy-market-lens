@@ -141,13 +141,11 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
           )}
         </div>
         <div className="reg-header-actions">
-          <button
-            className={`refresh-btn ${loading ? 'loading' : ''}`}
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            {loading ? 'Searching…' : (error && !items) ? 'Retry' : 'Refresh'}
-          </button>
+          {(loading || (error && !items)) && (
+            <button className={`refresh-btn ${loading ? 'loading' : ''}`} onClick={handleRefresh} disabled={loading}>
+              {loading ? 'Searching…' : 'Retry'}
+            </button>
+          )}
           <button
             className={`gear-btn ${showSettings ? 'active' : ''}`}
             onClick={() => setShowSettings(v => !v)}
@@ -204,6 +202,11 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
               onChange={e => setLookback(Math.min(180, Math.max(30, Number(e.target.value))))}
             />
             <span className="cs-lookback-unit">days</span>
+          </div>
+          <div className="reg-settings-footer">
+            <button className="reg-regenerate-btn" onClick={() => { setShowSettings(false); handleRefresh() }}>
+              Regenerate
+            </button>
           </div>
 
         </div>
