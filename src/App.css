@@ -1156,6 +1156,9 @@ body {
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid #1e293b;
 }
 .compare-toggle input[type='checkbox'] {
   cursor: pointer;

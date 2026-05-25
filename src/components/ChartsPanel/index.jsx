@@ -68,15 +68,15 @@ export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRa
               {opt.label}
             </button>
           ))}
+          <label className="compare-toggle">
+            <input
+              type="checkbox"
+              checked={compareEnabled}
+              onChange={e => setCompareEnabled(e.target.checked)}
+            />
+            <span>{compareLoading ? 'Loading…' : 'Compare previous period'}</span>
+          </label>
         </div>
-        <label className="compare-toggle">
-          <input
-            type="checkbox"
-            checked={compareEnabled}
-            onChange={e => setCompareEnabled(e.target.checked)}
-          />
-          <span>{compareLoading ? 'Loading…' : 'Compare prev. period'}</span>
-        </label>
         {lastGenerated && (
           <span className="toolbar-last-generated">Summary last generated: {lastGenerated}</span>
         )}
