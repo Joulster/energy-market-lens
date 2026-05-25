@@ -90,64 +90,24 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
     return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
   }
 
-  const afrrSlice      = slice(afrr?.daily)
-  const imbalanceSlice = slice(imbalance?.daily)
-  const hlaSlice       = slice(dayAhead?.dailyHLA)
-  const negHoursSlice  = (dayAhead?.negativeHoursPerWeek ?? []).filter(d => d.week >= cutoffStr)
-  const solarSlice     = slice(generation?.solar)
-  const windSlice      = slice(generation?.wind)
-
-  const imbalanceMidVals = imbalanceSlice.map(d => d.midPrice).filter(Boolean)
-  const imbalanceMean = imbalanceMidVals.length
-    ? imbalanceMidVals.reduce((s, v) => s + v, 0) / imbalanceMidVals.length
-    : null
-  const imbalanceStdDev = imbalanceMidVals.length && imbalanceMean != null
-    ? Math.sqrt(imbalanceMidVals.reduce((s, v) => s + (v - imbalanceMean) ** 2, 0) / imbalanceMidVals.length)
-    : null
+  const hlaSlice      = slice(dayAhead?.dailyHLA)
+  const negHoursSlice = (dayAhead?.negativeHoursPerWeek ?? []).filter(d => d.week >= cutoffStr)
 
   const periodHigh = hlaSlice.length ? Math.max(...hlaSlice.map(d => d.high)) : null
   const periodLow  = hlaSlice.length ? Math.min(...hlaSlice.map(d => d.low))  : null
   const periodAvg  = mean(hlaSlice, 'avg')
   const negHours   = negHoursSlice.reduce((s, d) => s + (d.count || 0), 0)
 
-  // Map internal keys to human-readable source names
-  const SOURCE_LABELS = {
-    imbalance: 'TenneT imbalance prices',
-    afrr:      'TenneT aFRR/FCR prices',
-    dayAhead:  'ENTSO-E day-ahead prices',
-    generation:'ENTSO-E actual generation',
-  }
-  const unavailable = Object.entries(errors)
-    .filter(([, err]) => err != null)
-    .map(([key]) => SOURCE_LABELS[key] ?? key)
-
   return {
     period: { from: cutoffStr, to: todayStr },
-    unavailable,
     dayAheadPrice: {
-      avgEurMwh:         periodAvg,
-      highEurMwh:        periodHigh,
-      lowEurMwh:         periodLow,
-      rangeEurMwh:       periodHigh != null && periodLow != null ? periodHigh - periodLow : null,
-      negativeHours:     negHours,
-      dailyHLA:          hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) })),
+      avgEurMwh:   periodAvg,
+      highEurMwh:  periodHigh,
+      lowEurMwh:   periodLow,
+      rangeEurMwh: periodHigh != null && periodLow != null ? periodHigh - periodLow : null,
+      negativeHours: negHours,
+      dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) })),
     },
-    battery: {
-      afrrCapacityPriceAvg: mean(afrrSlice, 'afrrCapacityPrice'),
-      afrrUpEnergyAvg:      mean(afrrSlice, 'afrrUpEnergyPrice'),
-      afrrDownEnergyAvg:    mean(afrrSlice, 'afrrDownEnergyPrice'),
-      fcrPriceAvg:          mean(afrrSlice, 'fcrPrice'),
-      imbalanceMidPriceAvg: imbalanceMean,
-      negativeHoursCount:   negHours,
-    },
-    solar: {
-      dayAheadAvgPrice:            periodAvg,
-      negativeHoursThisWeek:       negHours,
-      nlGridTotalAvgGenMW:         mean(solarSlice, 'avg'),
-    },
-    wind: {
-      dayAheadAvgPrice:            periodAvg,
-      imbalanceMidPriceStdDev:     imbalanceStdDev,
-    },
+    negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),
   }
 }

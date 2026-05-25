@@ -9,7 +9,7 @@ function getClient() {
 }
 
 export async function generateNarrative(marketData, systemPromptOverride, startDate, endDate) {
-  const { period, unavailable = [], dayAheadPrice, battery, solar, wind } = marketData
+  const { period, dayAheadPrice, negativeHoursPerWeek } = marketData
   const systemPrompt = systemPromptOverride?.trim() || NARRATIVE_PROMPT
 
   const periodStr = (startDate && endDate)
@@ -18,17 +18,17 @@ export async function generateNarrative(marketData, systemPromptOverride, startD
     ? `${period.from} to ${period.to}`
     : 'last 7 days'
 
-  const unavailableNote = unavailable.length
-    ? `\nUnavailable data sources (do not fabricate values for these):\n${unavailable.map(s => `- ${s}`).join('\n')}\n`
-    : ''
-
   const dailyHLAStr = dayAheadPrice?.dailyHLA?.length
     ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}`).join('\n')
     : '  N/A'
 
+  const negHoursStr = negativeHoursPerWeek?.length
+    ? negativeHoursPerWeek.map(d => `  ${d.week}: ${d.count} hours`).join('\n')
+    : '  N/A'
+
   const userMessage = `NL energy market data for ${periodStr}:
-${unavailableNote}
-Day-ahead prices (EUR/MWh):
+
+Chart 1 — Day-Ahead Price NL (EUR/MWh):
 - Period average: ${fmt(dayAheadPrice?.avgEurMwh)}
 - Period high: ${fmt(dayAheadPrice?.highEurMwh)}
 - Period low: ${fmt(dayAheadPrice?.lowEurMwh)}
@@ -37,18 +37,8 @@ Day-ahead prices (EUR/MWh):
 - Daily HLA breakdown:
 ${dailyHLAStr}
 
-Battery / ancillary services:
-- aFRR capacity price avg: ${fmt(battery?.afrrCapacityPriceAvg)} EUR/MW/h
-- aFRR up energy avg: ${fmt(battery?.afrrUpEnergyAvg)} EUR/MWh
-- aFRR down energy avg: ${fmt(battery?.afrrDownEnergyAvg)} EUR/MWh
-- FCR clearing price avg: ${fmt(battery?.fcrPriceAvg)} EUR/MW/h
-- Imbalance midprice avg: ${fmt(battery?.imbalanceMidPriceAvg)} EUR/MWh
-
-NL grid solar generation (market-level context only, not individual operator portfolios):
-- Solar NL total avg generation: ${fmt(solar?.nlGridTotalAvgGenMW)} MW
-
-Wind:
-- Imbalance midprice std dev: ${fmt(wind?.imbalanceMidPriceStdDev)} EUR/MWh
+Chart 2 — Negative Price Hours per Week:
+${negHoursStr}
 
 Write the briefing JSON now.`
 
