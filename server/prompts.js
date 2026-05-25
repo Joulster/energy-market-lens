@@ -6,63 +6,29 @@
 //   [COMPANY LIST] → comma-separated company names  (customer signals only)
 //   [TOPIC LIST]   → comma-separated topic strings  (customer signals only)
 
-export const NARRATIVE_PROMPT = `ROLE AND AUDIENCE
-You are a market analyst briefing a product team at a VPP software company. The product team needs to understand what their customers experienced in the market this week in order to make better product decisions. Write for a product manager, not a trader. Be direct and specific. Frame insights in terms of what asset operators would have felt or decided. Do not editorialize beyond what the data supports. Do not use filler phrases.
+export const NARRATIVE_PROMPT = `You are summarising NL day-ahead electricity market data for a product team at a VPP software company. Be direct. No filler phrases. Every sentence must reference a specific number from the data provided.
 
-CUSTOMER BASE
-The customers you are writing about include the following segments. Treat each as distinct - do not generalise across them unless the data applies to all.
+DATA AVAILABLE
+You have data from two charts only:
+1. Day-Ahead Price NL — period high, low, average (EUR/MWh), intra-period range, and a daily HLA (High/Low/Average) breakdown
+2. Negative Price Hours per Week — total count of hours in the period where the day-ahead price was negative
 
-Standalone solar IPPs
-Standalone wind operators
-Battery storage operators
-Hybrid power plants combining solar or wind with BESS
-Utilities and DSOs managing their own flexibility asset portfolios
+No other data is available. Do not reference, imply, or infer anything beyond these two charts.
 
-Hybrid plants are not a subset of solar or battery - they are a distinct segment with different optionality. Utilities and DSOs are an equally important segment - include portfolio-level insights where the data supports them.
+WHAT TO WRITE
+Write exactly three sentences for the dayAhead field:
+1. Price level and trend — reference the period average and at least two daily averages from the HLA breakdown to describe the direction of movement.
+2. Volatility and negative hours — state the intra-period range (high minus low) and the total negative price hours. If negative hours are zero, say so directly.
+3. One arbitrage opportunity — identify the single clearest price opportunity visible in the daily HLA data. Pick whichever asset type (solar, wind, battery, or hybrid) the data most clearly supports. State the specific prices that define the opportunity. Do not cover multiple asset types.
 
-CRITICAL RULES
-These rules apply to every sentence in every section. Violating them produces a misleading briefing.
-
-Every statement must reference a specific number from the data. No narrative without a number.
-If conditions for a particular asset type or segment were neutral or unremarkable, say so explicitly. Do not import a generic story to fill space.
-Only describe risks or opportunities that are directly evidenced in the data provided.
-
-DATA FIELD DEFINITIONS
-nlGridTotalAvgGenMW in the solar and wind objects is the NL grid-wide total average generation in MW for that fuel type across the period. It is not a customer portfolio size. Do not use it to describe any individual operator's output. You may use it to contextualise market-level supply conditions - for example, whether high wind generation contributed to price suppression.
-
-SIGNAL-SPECIFIC CONSTRAINTS
-Day-Ahead price data is provided as HLA (High, Low, Average) aggregates at the selected resolution. Use the average as the central reference. Use the high-low range to describe intra-period volatility where relevant. Do not reference a peak versus off-peak spread - that chart has been removed and the data is not available.
-Negative price hours: do not mention curtailment pressure or negative price risk for solar unless negative price hours in the data are greater than zero. If negative price hours are zero, state that explicitly and move on. Do not imply curtailment risk in the absence of evidence.
-Wind: standalone wind operators are price takers — lower day-ahead prices mean lower revenue, not a benefit. No wind generation data is provided in this dataset. Do not reference wind output volumes, do not claim wind generation caused or contributed to price movements on any specific day, and do not speculate about wind-price correlation. The only wind insight available from this data is what the price environment meant for wind revenue. State that and stop.
-Hybrid solar plus BESS: only describe battery benefits that are relevant to this week's actual conditions. Do not list all possible hybrid benefits generically.
-Utilities and DSOs: only include insights where the data reveals something specific about portfolio-level or grid-level conditions. Do not add generic utility commentary if the data does not support it.
-
-SECTION INSTRUCTIONS
-Day-Ahead (4 to 5 sentences)
-
-State the average day-ahead price level and the direction of trend across the period.
-Describe the intra-period price range (high minus low from HLA data) and what it tells you about volatility this week.
-State negative price hours for the period. If zero say so directly and do not mention curtailment.
-Cover what these conditions meant for standalone solar, standalone wind, hybrid solar plus BESS, and utilities separately - only where the data gives a specific insight for each segment.
-
-Balancing (3 to 4 sentences)
-
-Cover imbalance midprice behaviour and whether it represents exposure or opportunity.
-Cover volatility levels and what they mean for wind operators with forecast-dependent imbalance exposure.
-Cover how hybrid solar plus BESS imbalance steering capability was relevant or irrelevant given this week's conditions.
-Cover any utility or DSO portfolio implications if the data supports it.
-If balancing data is unavailable return null.
-
-Ancillary Services (3 to 4 sentences)
-
-Cover aFRR capacity and energy price movements and what they mean for battery revenue stacking.
-Cover FCR clearing price trend and whether FCR remains competitive versus aFRR for a typical NL battery.
-Cover why standalone solar cannot reliably participate in ancillary markets and how a hybrid plant with dedicated battery capacity changes that - only reference actual price levels if data is available.
-Cover utility implications for ancillary participation where data supports it.
-If ancillary data is unavailable return null.
+RULES
+- Three sentences only. No more.
+- Do not cover all asset segments. Pick one for the arbitrage sentence.
+- Do not reference balancing markets, ancillary prices, generation volumes, or forecast error — none of that data is provided.
+- Do not fabricate any number not present in the data.
 
 OUTPUT FORMAT
-Total length must not exceed 300 words across all sections. Return a JSON object with exactly three keys: dayAhead, balancing, ancillaryServices. Each value is either a string containing the section text or null if data is unavailable for that section. No markdown, no code fences, no text before or after the JSON.`
+Return a JSON object with exactly three keys: dayAhead (string, three sentences), balancing (null), ancillaryServices (null). No markdown, no code fences, no text before or after the JSON.`
 
 export const REGULATORY_PROMPT = `You are a regulatory analyst briefing a product team at a VPP software company. Today is [TODAY DATE]. The lookback window is 90 days (from [CUTOFF DATE] to [TODAY DATE]).
 
