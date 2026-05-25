@@ -96,15 +96,16 @@ export function buildNarrativePayload(data, startDate, endDate) {
   const periodHigh = hlaSlice.length ? Math.max(...hlaSlice.map(d => d.high)) : null
   const periodLow  = hlaSlice.length ? Math.min(...hlaSlice.map(d => d.low))  : null
   const periodAvg  = mean(hlaSlice, 'avg')
-  const negHours   = negHoursSlice.reduce((s, d) => s + (d.count || 0), 0)
 
-  // Per-day negative hour counts from hourly HLA (hour avg < 0)
+  // Per-day negative hour counts from hourly HLA (hour avg < 0) — single source of truth
   const negHoursByDay = {}
   for (const d of (dayAhead?.hourlyHLA ?? [])) {
     if (d.date >= cutoffStr && d.avg < 0) {
       negHoursByDay[d.date] = (negHoursByDay[d.date] || 0) + 1
     }
   }
+  // Derive period total from per-day counts so the two are always consistent
+  const negHours = Object.values(negHoursByDay).reduce((s, n) => s + n, 0)
 
   // Hourly HLA only for days where the daily low was negative
   const negativeDays = new Set(hlaSlice.filter(d => d.low < 0).map(d => d.date))
