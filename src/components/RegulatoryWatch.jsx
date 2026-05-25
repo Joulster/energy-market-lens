@@ -24,6 +24,7 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
   const [lastUpdated, setLastUpdated]   = useState(null)
   const [fromCache, setFromCache]       = useState(false)
   const [showAll, setShowAll]           = useState(false)
+  const [dirty, setDirty]               = useState(false)
 
   // Auto-fetch on mount — cache hit is near-instant for repeat visits
   useEffect(() => { handleRefresh() }, [])
@@ -31,6 +32,7 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
   async function handleRefresh() {
     setLoading(true)
     setError(null)
+    setDirty(false)
     try {
       const res = await fetch('/api/regulatory', {
         method: 'POST',
@@ -52,6 +54,7 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
 
   function toggleSource(id) {
     setSources(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s))
+    setDirty(true)
   }
 
   function addSource() {
@@ -59,6 +62,7 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
     if (!name || !url) return
     setSources(prev => [...prev, { id: nextId++, name, url, enabled: true }])
     setNewName(''); setNewUrl('')
+    setDirty(true)
   }
 
   const displayedItems = items ? (showAll ? items : items.slice(0, 3)) : null
@@ -116,12 +120,12 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
               min={30}
               max={180}
               value={lookback}
-              onChange={e => setLookback(Math.min(180, Math.max(30, Number(e.target.value))))}
+              onChange={e => { setLookback(Math.min(180, Math.max(30, Number(e.target.value)))); setDirty(true) }}
             />
             <span className="cs-lookback-unit">days</span>
           </div>
           <div className="reg-settings-footer">
-            <button className="reg-regenerate-btn" onClick={() => { setShowSettings(false); handleRefresh() }}>
+            <button className={`reg-regenerate-btn${dirty ? ' active' : ''}`} onClick={() => { setShowSettings(false); handleRefresh() }}>
               Regenerate
             </button>
           </div>

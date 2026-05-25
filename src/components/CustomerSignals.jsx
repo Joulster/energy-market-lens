@@ -75,6 +75,7 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
   const [lastUpdated, setLastUpdated] = useState(null)
   const [fromCache, setFromCache]     = useState(false)
   const [showAll, setShowAll]         = useState(false)
+  const [dirty, setDirty]             = useState(false)
 
   // Auto-fetch on mount — cache hit is near-instant for repeat visits
   useEffect(() => { handleRefresh() }, [])
@@ -82,6 +83,7 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
   async function handleRefresh() {
     setLoading(true)
     setError(null)
+    setDirty(false)
     try {
       const enabledSources = sources.filter(s => s.enabled)
       const res = await fetch('/api/customer-signals', {
@@ -110,6 +112,7 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
 
   function toggleSource(id) {
     setSources(prev => prev.map(s => s.id === id ? { ...s, enabled: !s.enabled } : s))
+    setDirty(true)
   }
 
   function addSource() {
@@ -117,6 +120,7 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
     if (!name || !url) return
     setSources(prev => [...prev, { id: nextId++, name, url, enabled: true }])
     setNewName(''); setNewUrl('')
+    setDirty(true)
   }
 
   function parseSource(item) {
@@ -184,11 +188,11 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
 
           {/* Section 2: Companies to Watch */}
           <p className="reg-settings-label cs-settings-label">Companies to Watch</p>
-          <TagInput tags={companies} onChange={setCompanies} placeholder="Company name…" />
+          <TagInput tags={companies} onChange={v => { setCompanies(v); setDirty(true) }} placeholder="Company name…" />
 
           {/* Section 3: Topics */}
           <p className="reg-settings-label cs-settings-label">Topics</p>
-          <TagInput tags={topics} onChange={setTopics} placeholder="Topic…" />
+          <TagInput tags={topics} onChange={v => { setTopics(v); setDirty(true) }} placeholder="Topic…" />
 
           {/* Section 4: Lookback */}
           <p className="reg-settings-label cs-settings-label">Lookback Window</p>
@@ -199,12 +203,12 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
               min={30}
               max={180}
               value={lookback}
-              onChange={e => setLookback(Math.min(180, Math.max(30, Number(e.target.value))))}
+              onChange={e => { setLookback(Math.min(180, Math.max(30, Number(e.target.value)))); setDirty(true) }}
             />
             <span className="cs-lookback-unit">days</span>
           </div>
           <div className="reg-settings-footer">
-            <button className="reg-regenerate-btn" onClick={() => { setShowSettings(false); handleRefresh() }}>
+            <button className={`reg-regenerate-btn${dirty ? ' active' : ''}`} onClick={() => { setShowSettings(false); handleRefresh() }}>
               Regenerate
             </button>
           </div>
