@@ -9,7 +9,7 @@ function getClient() {
 }
 
 export async function generateNarrative(marketData, systemPromptOverride, startDate, endDate) {
-  const { period, unavailable = [], battery, solar, wind } = marketData
+  const { period, unavailable = [], dayAheadPrice, battery, solar, wind } = marketData
   const systemPrompt = systemPromptOverride?.trim() || NARRATIVE_PROMPT
 
   const periodStr = (startDate && endDate)
@@ -22,28 +22,34 @@ export async function generateNarrative(marketData, systemPromptOverride, startD
     ? `\nUnavailable data sources (do not fabricate values for these):\n${unavailable.map(s => `- ${s}`).join('\n')}\n`
     : ''
 
-  const userMessage = `NL energy market summary for ${periodStr}:
+  const dailyHLAStr = dayAheadPrice?.dailyHLA?.length
+    ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}`).join('\n')
+    : '  N/A'
+
+  const userMessage = `NL energy market data for ${periodStr}:
 ${unavailableNote}
-Battery/ancillary services:
+Day-ahead prices (EUR/MWh):
+- Period average: ${fmt(dayAheadPrice?.avgEurMwh)}
+- Period high: ${fmt(dayAheadPrice?.highEurMwh)}
+- Period low: ${fmt(dayAheadPrice?.lowEurMwh)}
+- Intra-period range (high minus low): ${fmt(dayAheadPrice?.rangeEurMwh)}
+- Negative price hours total: ${dayAheadPrice?.negativeHours ?? 'N/A'}
+- Daily HLA breakdown:
+${dailyHLAStr}
+
+Battery / ancillary services:
 - aFRR capacity price avg: ${fmt(battery?.afrrCapacityPriceAvg)} EUR/MW/h
 - aFRR up energy avg: ${fmt(battery?.afrrUpEnergyAvg)} EUR/MWh
 - aFRR down energy avg: ${fmt(battery?.afrrDownEnergyAvg)} EUR/MWh
 - FCR clearing price avg: ${fmt(battery?.fcrPriceAvg)} EUR/MW/h
 - Imbalance midprice avg: ${fmt(battery?.imbalanceMidPriceAvg)} EUR/MWh
-- Day-ahead peak/offpeak spread avg: ${fmt(battery?.dayAheadSpreadAvg)} EUR/MWh
-- Negative price hours (imbalance): ${battery?.negativeHoursCount ?? 'N/A'}
 
-Solar:
-- Day-ahead avg price: ${fmt(solar?.dayAheadAvgPrice)} EUR/MWh
-- Negative price hours: ${solar?.negativeHoursThisWeek ?? 'N/A'}
-- Avg generation: ${fmt(solar?.avgGenMW)} MW
+NL grid generation (market-level context only, not individual operator portfolios):
+- Solar NL total avg generation: ${fmt(solar?.nlGridTotalAvgGenMW)} MW
+- Wind NL total avg generation: ${fmt(wind?.nlGridTotalAvgGenMW)} MW
+- Wind imbalance midprice std dev: ${fmt(wind?.imbalanceMidPriceStdDev)} EUR/MWh
 
-Wind:
-- Day-ahead avg price: ${fmt(wind?.dayAheadAvgPrice)} EUR/MWh
-- Avg generation: ${fmt(wind?.avgGenMW)} MW
-- Imbalance midprice std dev: ${fmt(wind?.imbalanceMidPriceStdDev)} EUR/MWh
-
-Write the trader briefing JSON now.`
+Write the briefing JSON now.`
 
   const message = await getClient().messages.create({
     model: 'claude-haiku-4-5',
