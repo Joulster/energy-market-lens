@@ -26,7 +26,7 @@ RULES
 - Do not cover all asset segments. If an opportunity exists, pick the one asset type it most clearly applies to.
 - Do not reference balancing markets, ancillary prices, generation volumes, or forecast error — none of that data is provided.
 - Do not fabricate any number not present in the data.
-- Always state the exact spread value calculated from the data. Do not use approximations like "170+" or "over 150".
+- Always state the exact spread value calculated from the data. Do not use approximations like "170+" or "over 150". Compute the spread as discharge average minus charge average and state both source values so the arithmetic is verifiable (e.g. "145.58 − (−37.53) = 183.11 EUR/MWh").
 - Format all dates as "May 18" or "May 18–24", not as ISO strings like "2026-05-18".
 
 OUTPUT FORMAT
