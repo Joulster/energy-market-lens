@@ -83,7 +83,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="app-header-brand">
-          <h1 className="app-title">Energy Market Lens — NL</h1>
+          <h1 className="app-title">Energy Market Lens — NL <span className="beta-tag">beta</span></h1>
           <span className="app-subtitle">NL energy market intelligence · multi-horizon view</span>
         </div>
         <button
