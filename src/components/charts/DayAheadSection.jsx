@@ -177,7 +177,7 @@ function fmtRangeDate(iso) {
 // text === null       → Claude returned null (data unavailable)
 // text === string     → show the text
 // isStale             → dates have changed since generation; show amber warning
-function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates }) {
+function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, lastGenerated }) {
   const hasResult  = text !== undefined
   const rangeLabel = generatedDates
     ? `${fmtRangeDate(generatedDates.startDate)} – ${fmtRangeDate(generatedDates.endDate)}`
@@ -210,13 +210,16 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates }) {
             ? <p className="ai-summary-text">{text}</p>
             : <p className="ai-summary-unavailable">No data available for this section.</p>
       )}
+      {hasResult && !loading && lastGenerated && (
+        <p className="ai-summary-timestamp">Generated at {lastGenerated}</p>
+      )}
     </div>
   )
 }
 
 // ── Section ────────────────────────────────────────────────────────────────
 
-export default function DayAheadSection({ dayAhead, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, dataLoading, compareEnabled, compareData, compareDates }) {
+export default function DayAheadSection({ dayAhead, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, lastGenerated, dataLoading, compareEnabled, compareData, compareDates }) {
   const [resolution, setResolution] = useState('15m')
 
   const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
@@ -349,7 +352,7 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
         </ResponsiveContainer>
       </ChartWrap>
 
-      <SummaryBlock text={narrative} loading={loading} onGenerate={onGenerate} isStale={isStale} generatedDates={generatedDates} />
+      <SummaryBlock text={narrative} loading={loading} onGenerate={onGenerate} isStale={isStale} generatedDates={generatedDates} lastGenerated={lastGenerated} />
     </section>
   )
 }

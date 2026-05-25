@@ -31,7 +31,7 @@ function fmtRangeDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
-function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates }) {
+function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, lastGenerated }) {
   const hasResult  = text !== undefined
   const rangeLabel = generatedDates
     ? `${fmtRangeDate(generatedDates.startDate)} – ${fmtRangeDate(generatedDates.endDate)}`
@@ -64,11 +64,14 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates }) {
             ? <p className="ai-summary-text">{text}</p>
             : <p className="ai-summary-unavailable">No data available for this section.</p>
       )}
+      {hasResult && !loading && lastGenerated && (
+        <p className="ai-summary-timestamp">Generated at {lastGenerated}</p>
+      )}
     </div>
   )
 }
 
-export default function BalancingSection({ imbalance, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, dataLoading, compareEnabled, compareData, compareDates }) {
+export default function BalancingSection({ imbalance, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, lastGenerated, dataLoading, compareEnabled, compareData, compareDates }) {
   const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
   const inPrevRange = d => (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate)
 
@@ -123,7 +126,7 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
         </ResponsiveContainer>
       </ChartWrap>
 
-      <SummaryBlock text={narrative} loading={loading} onGenerate={onGenerate} isStale={isStale} generatedDates={generatedDates} />
+      <SummaryBlock text={narrative} loading={loading} onGenerate={onGenerate} isStale={isStale} generatedDates={generatedDates} lastGenerated={lastGenerated} />
     </section>
   )
 }

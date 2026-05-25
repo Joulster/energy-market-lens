@@ -1277,11 +1277,6 @@ body {
   color: #e2e8f0;
 }
 
-.toolbar-last-generated {
-  font-size: 11px;
-  color: #475569;
-}
-
 @keyframes btn-spin {
   to { transform: rotate(360deg); }
 }
@@ -1405,4 +1400,11 @@ body {
   font-size: 11px;
   color: #475569;
   font-style: italic;
+}
+
+.ai-summary-timestamp {
+  font-size: 10px;
+  color: #334155;
+  margin-top: 8px;
+  text-align: right;
 }

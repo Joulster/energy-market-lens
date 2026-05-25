@@ -77,9 +77,6 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompt, select
             <span>{compareLoading ? 'Loading…' : 'Compare previous period'}</span>
           </label>
         </div>
-        {lastGenerated && (
-          <span className="toolbar-last-generated">Summary last generated: {lastGenerated}</span>
-        )}
       </div>
 
       {(() => {
@@ -94,6 +91,7 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompt, select
             startDate={dates.startDate} endDate={dates.endDate}
             narrative={narrative?.dayAhead} loading={loading}
             onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
+            lastGenerated={lastGenerated}
             dataLoading={dataLoading?.dayAhead}
             {...cmp}
           />
@@ -102,6 +100,7 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompt, select
             startDate={dates.startDate} endDate={dates.endDate}
             narrative={narrative?.balancing} loading={loading}
             onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
+            lastGenerated={lastGenerated}
             dataLoading={dataLoading?.imbalance}
             {...cmp}
           />
@@ -110,6 +109,7 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompt, select
             startDate={dates.startDate} endDate={dates.endDate}
             narrative={narrative?.ancillaryServices} loading={loading}
             onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
+            lastGenerated={lastGenerated}
             dataLoading={dataLoading?.afrr}
             {...cmp}
           />
