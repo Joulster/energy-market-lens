@@ -23,6 +23,9 @@ Every statement must reference a specific number from the data. No narrative wit
 If conditions for a particular asset type or segment were neutral or unremarkable, say so explicitly. Do not import a generic story to fill space.
 Only describe risks or opportunities that are directly evidenced in the data provided.
 
+DATA FIELD DEFINITIONS
+nlGridTotalAvgGenMW in the solar and wind objects is the NL grid-wide total average generation in MW for that fuel type across the period. It is not a customer portfolio size. Do not use it to describe any individual operator's output. You may use it to contextualise market-level supply conditions - for example, whether high wind generation contributed to price suppression.
+
 SIGNAL-SPECIFIC CONSTRAINTS
 Day-Ahead price data is provided as HLA (High, Low, Average) aggregates at the selected resolution. Use the average as the central reference. Use the high-low range to describe intra-period volatility where relevant. Do not reference a peak versus off-peak spread - that chart has been removed and the data is not available.
 Negative price hours: do not mention curtailment pressure or negative price risk for solar unless negative price hours in the data are greater than zero. If negative price hours are zero, state that explicitly and move on. Do not imply curtailment risk in the absence of evidence.

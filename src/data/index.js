@@ -141,14 +141,14 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
       negativeHoursCount:   negHours,
     },
     solar: {
-      dayAheadAvgPrice:      periodAvg,
-      negativeHoursThisWeek: negHours,
-      avgGenMW:              mean(solarSlice, 'avg'),
+      dayAheadAvgPrice:            periodAvg,
+      negativeHoursThisWeek:       negHours,
+      nlGridTotalAvgGenMW:         mean(solarSlice, 'avg'),
     },
     wind: {
-      dayAheadAvgPrice:        periodAvg,
-      avgGenMW:                mean(windSlice, 'avg'),
-      imbalanceMidPriceStdDev: imbalanceStdDev,
+      dayAheadAvgPrice:            periodAvg,
+      nlGridTotalAvgGenMW:         mean(windSlice, 'avg'),
+      imbalanceMidPriceStdDev:     imbalanceStdDev,
     },
   }
 }
