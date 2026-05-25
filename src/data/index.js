@@ -98,6 +98,14 @@ export function buildNarrativePayload(data, startDate, endDate) {
   const periodAvg  = mean(hlaSlice, 'avg')
   const negHours   = negHoursSlice.reduce((s, d) => s + (d.count || 0), 0)
 
+  // Per-day negative hour counts from hourly HLA (hour avg < 0)
+  const negHoursByDay = {}
+  for (const d of (dayAhead?.hourlyHLA ?? [])) {
+    if (d.date >= cutoffStr && d.avg < 0) {
+      negHoursByDay[d.date] = (negHoursByDay[d.date] || 0) + 1
+    }
+  }
+
   // Hourly HLA only for days where the daily low was negative
   const negativeDays = new Set(hlaSlice.filter(d => d.low < 0).map(d => d.date))
   const hourlyHLAForNegativeDays = (dayAhead?.hourlyHLA ?? [])
@@ -112,7 +120,7 @@ export function buildNarrativePayload(data, startDate, endDate) {
       lowEurMwh:   periodLow,
       rangeEurMwh: periodHigh != null && periodLow != null ? periodHigh - periodLow : null,
       negativeHours: negHours,
-      dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) })),
+      dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2), negativeHours: negHoursByDay[d.date] ?? 0 })),
       hourlyHLAForNegativeDays,
     },
     negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),

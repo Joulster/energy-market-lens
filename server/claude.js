@@ -19,7 +19,7 @@ export async function generateNarrative(marketData, systemPromptOverride, startD
     : 'last 7 days'
 
   const dailyHLAStr = dayAheadPrice?.dailyHLA?.length
-    ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}`).join('\n')
+    ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}, negHours ${d.negativeHours}`).join('\n')
     : '  N/A'
 
   const hourlyHLAStr = dayAheadPrice?.hourlyHLAForNegativeDays?.length
