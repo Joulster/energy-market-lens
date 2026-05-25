@@ -151,6 +151,11 @@ export function buildNarrativePayload(data, startDate, endDate) {
     })
   }
 
+  // Only pass the single best window to Claude — highest spread, self-contained within one day
+  const bestArbitrageWindow = arbitrageWindows.length
+    ? arbitrageWindows.reduce((best, w) => w.spread > best.spread ? w : best)
+    : null
+
   return {
     period: { from: cutoffStr, to: todayStr },
     dayAheadPrice: {
@@ -161,7 +166,7 @@ export function buildNarrativePayload(data, startDate, endDate) {
       negativeHours: negHours,
       dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2), negativeHours: negHoursByDay[d.date] ?? 0 })),
       hourlyHLAForNegativeDays,
-      arbitrageWindows,
+      bestArbitrageWindow,
     },
     negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),
   }

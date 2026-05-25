@@ -22,12 +22,11 @@ export async function generateNarrative(marketData, systemPromptOverride, startD
     ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}, negHours ${d.negativeHours}`).join('\n')
     : '  N/A'
 
-  const arbitrageStr = dayAheadPrice?.arbitrageWindows?.length
-    ? dayAheadPrice.arbitrageWindows.map(w =>
-        `  ${w.date}: charge ${w.chargeWindow.startHour}:00–${w.chargeWindow.endHour}:00 avg ${fmt(w.chargeWindow.avgPrice)} EUR/MWh` +
-        ` | discharge ${w.dischargeWindow.startHour}:00–${w.dischargeWindow.endHour}:00 avg ${fmt(w.dischargeWindow.avgPrice)} EUR/MWh` +
-        ` | spread ${fmt(w.dischargeWindow.avgPrice)} − (${fmt(w.chargeWindow.avgPrice)}) = ${fmt(w.spread)} EUR/MWh`
-      ).join('\n')
+  const w = dayAheadPrice?.bestArbitrageWindow
+  const arbitrageStr = w
+    ? `  ${w.date}: charge ${w.chargeWindow.startHour}:00–${w.chargeWindow.endHour}:00 avg ${fmt(w.chargeWindow.avgPrice)} EUR/MWh` +
+      ` | discharge ${w.dischargeWindow.startHour}:00–${w.dischargeWindow.endHour}:00 avg ${fmt(w.dischargeWindow.avgPrice)} EUR/MWh` +
+      ` | spread ${fmt(w.dischargeWindow.avgPrice)} − (${fmt(w.chargeWindow.avgPrice)}) = ${fmt(w.spread)} EUR/MWh`
     : null
 
   const negHoursStr = negativeHoursPerWeek?.length
