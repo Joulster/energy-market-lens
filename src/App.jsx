@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import ChartsPanel from './components/ChartsPanel/index.jsx'
 import NarrativePanel from './components/NarrativePanel.jsx'
 import PromptEditorModal from './components/PromptEditorModal.jsx'
-import { loadAllMarketData } from './data/index.js'
+import { loadSourceData } from './data/index.js'
 import { computeDates } from './data/dateRange.js'
 import {
   DEFAULT_NARRATIVE_PROMPT,
@@ -36,8 +36,12 @@ function MagicPencilLogo() {
 }
 
 export default function App() {
-  const [marketData, setMarketData]         = useState(null)
-  const [loading, setLoading]               = useState(true)
+  const EMPTY_DATA = { dayAhead: null, generation: null, imbalance: null, afrr: null,
+                        errors: { dayAhead: null, generation: null, imbalance: null, afrr: null } }
+  const SOURCES = ['dayAhead', 'generation', 'imbalance', 'afrr']
+
+  const [marketData, setMarketData]   = useState(EMPTY_DATA)
+  const [dataLoading, setDataLoading] = useState({ dayAhead: true, generation: true, imbalance: true, afrr: true })
   const [selectedRange, setSelectedRange]   = useState('7d')
   const [promptSettings, setPromptSettings] = useState({ ...PROMPT_DEFAULTS })
   const [showPromptEditor, setShowPromptEditor] = useState(false)
@@ -71,12 +75,23 @@ export default function App() {
   )
 
   useEffect(() => {
-    setLoading(true)
+    // Reset to loading state immediately so charts show skeletons on range change
+    setMarketData(EMPTY_DATA)
+    setDataLoading({ dayAhead: true, generation: true, imbalance: true, afrr: true })
+
     const { startDate, endDate } = computeDates(selectedRange)
-    loadAllMarketData(startDate, endDate).then(data => {
-      setMarketData(data)
-      setLoading(false)
-    })
+
+    // Fire each source independently — charts render as soon as their own data arrives
+    for (const source of SOURCES) {
+      loadSourceData(source, startDate, endDate).then(({ data, error }) => {
+        setMarketData(prev => ({
+          ...prev,
+          [source]: data,
+          errors: { ...prev.errors, [source]: error },
+        }))
+        setDataLoading(prev => ({ ...prev, [source]: false }))
+      })
+    }
   }, [selectedRange])
 
   return (
@@ -96,33 +111,27 @@ export default function App() {
         </button>
       </header>
 
-      {loading ? (
-        <div className="app-loading">
-          <div className="spinner" />
-          <p>Loading market data…</p>
-        </div>
-      ) : (
-        <div className="app-body" ref={bodyRef}>
-          <ChartsPanel
-            data={marketData}
-            narrativePrompt={promptSettings.narrative}
-            selectedRange={selectedRange}
-            onRangeChange={setSelectedRange}
-            style={{ flex: `0 0 ${leftWidth}%` }}
-          />
-          <div
-            className="panel-resizer"
-            onMouseEnter={e => setResizerTip({ visible: true,  x: e.clientX, y: e.clientY })}
-            onMouseMove ={e => setResizerTip({ visible: true,  x: e.clientX, y: e.clientY })}
-            onMouseLeave={  () => setResizerTip(t => ({ ...t, visible: false }))}
-            onMouseDown ={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; setResizerTip(t => ({ ...t, visible: false })) }}
-          />
-          <NarrativePanel
-            promptSettings={promptSettings}
-            style={{ flex: `0 0 ${100 - leftWidth}%` }}
-          />
-        </div>
-      )}
+      <div className="app-body" ref={bodyRef}>
+        <ChartsPanel
+          data={marketData}
+          dataLoading={dataLoading}
+          narrativePrompt={promptSettings.narrative}
+          selectedRange={selectedRange}
+          onRangeChange={setSelectedRange}
+          style={{ flex: `0 0 ${leftWidth}%` }}
+        />
+        <div
+          className="panel-resizer"
+          onMouseEnter={e => setResizerTip({ visible: true,  x: e.clientX, y: e.clientY })}
+          onMouseMove ={e => setResizerTip({ visible: true,  x: e.clientX, y: e.clientY })}
+          onMouseLeave={  () => setResizerTip(t => ({ ...t, visible: false }))}
+          onMouseDown ={() => { dragging.current = true; document.body.style.cursor = 'col-resize'; setResizerTip(t => ({ ...t, visible: false })) }}
+        />
+        <NarrativePanel
+          promptSettings={promptSettings}
+          style={{ flex: `0 0 ${100 - leftWidth}%` }}
+        />
+      </div>
 
       {resizerTip.visible && (
         <div className="resizer-tooltip" style={{ left: resizerTip.x, top: resizerTip.y }}>

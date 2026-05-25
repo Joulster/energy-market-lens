@@ -62,18 +62,31 @@ export function CompareTooltip({ active, payload, label }) {
   )
 }
 
-export function ChartWrap({ children, title, source, isMock, controls, zoomed, onReset }) {
+export function ChartWrap({ children, title, source, isMock, isLoading, controls, zoomed, onReset }) {
   return (
     <div className="chart-wrap">
       <div className="chart-header">
         <div className="chart-header-left">
           <h3 className="chart-title">{title}</h3>
-          {!isMock && controls}
-          {!isMock && zoomed && <button className="zoom-reset-btn" onClick={onReset}>↺ Reset</button>}
+          {!isMock && !isLoading && controls}
+          {!isMock && !isLoading && zoomed && <button className="zoom-reset-btn" onClick={onReset}>↺ Reset</button>}
         </div>
         {source && <SourceBadge source={source} isMock={isMock} />}
       </div>
-      {isMock ? (
+      {isLoading ? (
+        <div className="chart-skeleton">
+          <div className="chart-skeleton-bar" style={{ height: '55%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '80%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '40%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '70%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '60%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '90%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '45%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '75%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '35%' }} />
+          <div className="chart-skeleton-bar" style={{ height: '65%' }} />
+        </div>
+      ) : isMock ? (
         <div className="chart-empty-state">
           <span className="chart-empty-icon">⏳</span>
           <p className="chart-empty-title">Coming soon</p>

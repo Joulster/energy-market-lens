@@ -23,6 +23,21 @@ async function apiFetch(path) {
   }
 }
 
+const SOURCE_ENDPOINTS = {
+  dayAhead:   '/api/day-ahead-prices',
+  generation: '/api/actual-generation',
+  imbalance:  '/api/imbalance-prices',
+  afrr:       '/api/afrr',
+}
+
+// Fetch a single data source. Used by App for independent per-chart loading.
+export async function loadSourceData(source, startDate, endDate) {
+  const qs  = startDate && endDate ? `?startDate=${startDate}&endDate=${endDate}` : ''
+  const res = await apiFetch(`${SOURCE_ENDPOINTS[source]}${qs}`)
+  return { data: res.data ?? null, error: res.ok ? null : res.error }
+}
+
+// Convenience wrapper used by the compare-period feature (still needs all sources together).
 export async function loadAllMarketData(startDate, endDate) {
   const qs = startDate && endDate ? `?startDate=${startDate}&endDate=${endDate}` : ''
   const [dayAhead, generation, imbalance, afrr] = await Promise.all([

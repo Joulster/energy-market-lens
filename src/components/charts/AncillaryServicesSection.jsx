@@ -47,7 +47,7 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates }) {
   )
 }
 
-export default function AncillaryServicesSection({ afrr, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, compareEnabled, compareData, compareDates }) {
+export default function AncillaryServicesSection({ afrr, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, dataLoading, compareEnabled, compareData, compareDates }) {
   const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
   const inPrevRange = d => (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate)
 
@@ -71,7 +71,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
     <section className="asset-section">
       <h2 className="section-title">Ancillary Services</h2>
 
-      <ChartWrap title="aFRR Capacity Price NL (EUR/MW/h)" source="TenneT" isMock={isMock} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
+      <ChartWrap title="aFRR Capacity Price NL (EUR/MW/h)" source="TenneT" isMock={isMock} isLoading={dataLoading} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -88,7 +88,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="FCR Clearing Price NL (EUR/MW/h)" source="TenneT" isMock={isMock} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
+      <ChartWrap title="FCR Clearing Price NL (EUR/MW/h)" source="TenneT" isMock={isMock} isLoading={dataLoading} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
@@ -105,7 +105,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="aFRR Energy Price NL — Up / Down (EUR/MWh)" source="TenneT" isMock={isMock} zoomed={zoom2.isZoomed} onReset={zoom2.reset}>
+      <ChartWrap title="aFRR Energy Price NL — Up / Down (EUR/MWh)" source="TenneT" isMock={isMock} isLoading={dataLoading} zoomed={zoom2.isZoomed} onReset={zoom2.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom2.displayData} {...chartProps} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />

@@ -5,7 +5,7 @@ import AncillaryServicesSection from '../charts/AncillaryServicesSection.jsx'
 import { buildNarrativePayload, fetchNarrative, loadAllMarketData } from '../../data/index.js'
 import { RANGE_OPTIONS, computeDates, computePrevDates } from '../../data/dateRange.js'
 
-export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRangeChange, style }) {
+export default function ChartsPanel({ data, dataLoading, narrativePrompt, selectedRange, onRangeChange, style }) {
   const { dayAhead, imbalance, afrr, errors } = data
 
   const [narrative, setNarrative]           = useState(undefined)
@@ -94,6 +94,7 @@ export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRa
             startDate={dates.startDate} endDate={dates.endDate}
             narrative={narrative?.dayAhead} loading={loading}
             onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
+            dataLoading={dataLoading?.dayAhead}
             {...cmp}
           />
           <BalancingSection
@@ -101,6 +102,7 @@ export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRa
             startDate={dates.startDate} endDate={dates.endDate}
             narrative={narrative?.balancing} loading={loading}
             onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
+            dataLoading={dataLoading?.imbalance}
             {...cmp}
           />
           <AncillaryServicesSection
@@ -108,6 +110,7 @@ export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRa
             startDate={dates.startDate} endDate={dates.endDate}
             narrative={narrative?.ancillaryServices} loading={loading}
             onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
+            dataLoading={dataLoading?.afrr}
             {...cmp}
           />
         </>
