@@ -16,8 +16,10 @@ function periodEnd() {
   return entsoeDate(startOfDay(new Date()))
 }
 
-function toEntsoeDate(isoStr) {
-  return entsoeDate(startOfDay(new Date(isoStr)))
+function toEntsoeDate(isoStr, addDays = 0) {
+  const d = startOfDay(new Date(isoStr))
+  if (addDays) d.setUTCDate(d.getUTCDate() + addDays)
+  return entsoeDate(d)
 }
 
 async function entsoeRequest(params) {
@@ -51,10 +53,10 @@ function parseXmlTimeSeries(xml) {
 
     const startStr = startMatch[1].replace('T', ' ').replace('Z', '')
     const resolution = resolutionMatch ? resolutionMatch[1] : 'PT60M'
-    const intervalHours = resolution === 'PT60M' ? 1 : resolution === 'PT30M' ? 0.5 : 1
+    const intervalHours = resolution === 'PT60M' ? 1 : resolution === 'PT30M' ? 0.5 : resolution === 'PT15M' ? 0.25 : 1
 
     const startDate = new Date(startStr + 'Z')
-    const pointMatches = periodXml.matchAll(/<Point>[\s\S]*?<position>(\d+)<\/position>[\s\S]*?<price\.amount>([\d.]+)<\/price\.amount>[\s\S]*?<\/Point>/g)
+    const pointMatches = periodXml.matchAll(/<Point>[\s\S]*?<position>(\d+)<\/position>[\s\S]*?<price\.amount>([-\d.]+)<\/price\.amount>[\s\S]*?<\/Point>/g)
 
     for (const ptMatch of pointMatches) {
       const position = parseInt(ptMatch[1], 10)
@@ -66,10 +68,23 @@ function parseXmlTimeSeries(xml) {
   return points
 }
 
+// Format a UTC timestamp as YYYY-MM-DD in Amsterdam local time (CET/CEST).
+// NL day-ahead delivery days run 00:00–24:00 CET, so all bucketing must use
+// the Amsterdam timezone — not UTC and not server local time.
+const AMS = 'Europe/Amsterdam'
+
+function cetDate(ts) {
+  return ts.toLocaleDateString('en-CA', { timeZone: AMS }) // en-CA → YYYY-MM-DD
+}
+
+function cetHour(ts) {
+  return parseInt(ts.toLocaleString('en-GB', { timeZone: AMS, hour: '2-digit', hour12: false }), 10)
+}
+
 function aggregateToDailyAvg(points) {
   const byDay = {}
   for (const { ts, price } of points) {
-    const day = format(ts, 'yyyy-MM-dd')
+    const day = cetDate(ts)
     if (!byDay[day]) byDay[day] = []
     byDay[day].push(price)
   }
@@ -81,22 +96,12 @@ function aggregateToDailyAvg(points) {
     }))
 }
 
-function computeHourlyByDate(points) {
-  const result = {}
-  for (const { ts, price } of points) {
-    const day = format(ts, 'yyyy-MM-dd')
-    const hour = ts.getUTCHours()
-    if (!result[day]) result[day] = {}
-    result[day][hour] = price
-  }
-  return result
-}
 
 function computePeakOffpeakSpread(points) {
   const byDay = {}
   for (const { ts, price } of points) {
-    const day = format(ts, 'yyyy-MM-dd')
-    const hour = ts.getUTCHours()
+    const day  = cetDate(ts)
+    const hour = cetHour(ts)
     if (!byDay[day]) byDay[day] = { peak: [], offpeak: [] }
     if (hour >= 8 && hour < 20) byDay[day].peak.push(price)
     else byDay[day].offpeak.push(price)
@@ -104,18 +109,32 @@ function computePeakOffpeakSpread(points) {
   return Object.entries(byDay)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, { peak, offpeak }]) => {
-      const avgPeak = peak.length ? peak.reduce((s, p) => s + p, 0) / peak.length : null
+      const avgPeak    = peak.length    ? peak.reduce((s, p)    => s + p, 0) / peak.length    : null
       const avgOffpeak = offpeak.length ? offpeak.reduce((s, p) => s + p, 0) / offpeak.length : null
       return { date, spread: avgPeak !== null && avgOffpeak !== null ? avgPeak - avgOffpeak : null }
     })
 }
 
 function countNegativeHours(points) {
-  const byWeek = {}
+  // Aggregate to hourly averages in CET (handles both PT60M and PT15M resolution)
+  const hourSums   = {}
+  const hourCounts = {}
   for (const { ts, price } of points) {
-    const weekStart = format(subDays(ts, ts.getDay()), 'yyyy-MM-dd')
-    if (!byWeek[weekStart]) byWeek[weekStart] = 0
-    if (price < 0) byWeek[weekStart]++
+    const key = `${cetDate(ts)}|${cetHour(ts)}`
+    hourSums[key]   = (hourSums[key]   || 0) + price
+    hourCounts[key] = (hourCounts[key] || 0) + 1
+  }
+  // Count hours with negative average price, bucketed by week
+  const byWeek = {}
+  for (const [key, total] of Object.entries(hourSums)) {
+    const [day] = key.split('|')
+    const avgPrice  = total / hourCounts[key]
+    const d         = new Date(day + 'T00:00:00')
+    const weekStart = new Date(d)
+    weekStart.setDate(d.getDate() - d.getDay()) // Sunday
+    const weekKey = weekStart.toISOString().slice(0, 10)
+    if (!byWeek[weekKey]) byWeek[weekKey] = 0
+    if (avgPrice < 0) byWeek[weekKey]++
   }
   return Object.entries(byWeek)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -123,8 +142,8 @@ function countNegativeHours(points) {
 }
 
 export async function fetchDayAheadPrices(startDate, endDate) {
-  const ps = startDate ? toEntsoeDate(startDate) : periodStart()
-  const pe = endDate   ? toEntsoeDate(endDate)   : periodEnd()
+  const ps = startDate ? toEntsoeDate(startDate)       : periodStart()
+  const pe = endDate   ? toEntsoeDate(endDate, 1) : periodEnd()
   const xml = await entsoeRequest({
     documentType: 'A44',
     in_Domain: BIDDING_ZONE,
@@ -138,10 +157,9 @@ export async function fetchDayAheadPrices(startDate, endDate) {
 
   return {
     dailyAvg: aggregateToDailyAvg(points),
-    hourlyByDate: computeHourlyByDate(points),
     peakOffpeakSpread: computePeakOffpeakSpread(points),
     negativeHoursPerWeek: countNegativeHours(points),
-    rawPoints: points.slice(0, 200),
+    rawPoints: points,
   }
 }
 

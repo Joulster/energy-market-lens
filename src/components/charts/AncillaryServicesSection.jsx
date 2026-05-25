@@ -1,9 +1,10 @@
 import {
-  LineChart, Line,
+  LineChart, Line, ReferenceArea,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts'
 import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip } from './shared.jsx'
+import { useZoom } from './useZoom.js'
 
 function fmtRangeDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -62,13 +63,17 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
     prevAfrrDownEnergyPrice: prevAfrr[i]?.afrrDownEnergyPrice,
   }))
 
+  const zoom0 = useZoom(mergedAfrr, 'date')
+  const zoom1 = useZoom(mergedAfrr, 'date')
+  const zoom2 = useZoom(mergedAfrr, 'date')
+
   return (
     <section className="asset-section">
       <h2 className="section-title">Ancillary Services</h2>
 
-      <ChartWrap title="aFRR Capacity Price NL (EUR/MW/h)" source="ENTSO-E" isMock={isMock}>
+      <ChartWrap title="aFRR Capacity Price NL (EUR/MW/h)" source="TenneT" isMock={isMock} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={mergedAfrr} {...chartProps}>
+          <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
@@ -76,13 +81,16 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="afrrCapacityPrice" stroke={COLORS.blue} dot={false} strokeWidth={2} name="aFRR Capacity Price (EUR/MW/h)" />
             {compareEnabled && <Line type="monotone" dataKey="prevAfrrCapacityPrice" stroke={COLORS.blue} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" />}
+            {zoom0.refArea.left && zoom0.refArea.right && (
+              <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="FCR Clearing Price NL (EUR/MW/h)" source="ENTSO-E" isMock={isMock}>
+      <ChartWrap title="FCR Clearing Price NL (EUR/MW/h)" source="TenneT" isMock={isMock} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={mergedAfrr} {...chartProps}>
+          <LineChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
@@ -90,13 +98,16 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="fcrPrice" stroke={COLORS.purple} dot={false} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" />
             {compareEnabled && <Line type="monotone" dataKey="prevFcrPrice" stroke={COLORS.purple} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" />}
+            {zoom1.refArea.left && zoom1.refArea.right && (
+              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="aFRR Energy Price NL — Up / Down (EUR/MWh)" source="ENTSO-E" isMock={isMock}>
+      <ChartWrap title="aFRR Energy Price NL — Up / Down (EUR/MWh)" source="TenneT" isMock={isMock} zoomed={zoom2.isZoomed} onReset={zoom2.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={mergedAfrr} {...chartProps}>
+          <LineChart data={zoom2.displayData} {...chartProps} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
@@ -106,6 +117,9 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
             <Line type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" />
             {compareEnabled && <Line type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" />}
             {compareEnabled && <Line type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" />}
+            {zoom2.refArea.left && zoom2.refArea.right && (
+              <ReferenceArea x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </ChartWrap>

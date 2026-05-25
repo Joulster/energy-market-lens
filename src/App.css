@@ -218,10 +218,44 @@ body {
 
 .chart-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 8px;
   gap: 8px;
+}
+
+.chart-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chart-resolution-selector {
+  padding: 2px;
+}
+
+.chart-resolution-selector .range-option {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+.zoom-reset-btn {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid #4f46e5;
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.zoom-reset-btn:hover {
+  background: rgba(99, 102, 241, 0.25);
+  color: #a5b4fc;
 }
 
 .chart-title {
@@ -249,6 +283,32 @@ body {
   background: #2d1a00;
   color: #fb923c;
   border: 1px solid #431407;
+}
+
+.chart-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 32px 16px;
+  color: #475569;
+}
+
+.chart-empty-icon {
+  font-size: 20px;
+  margin-bottom: 4px;
+}
+
+.chart-empty-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.chart-empty-sub {
+  font-size: 12px;
+  color: #475569;
 }
 
 /* ── Hourly heatmap shape ─────────────────────────────────────────────────── */

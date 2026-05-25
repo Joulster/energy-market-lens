@@ -21,7 +21,7 @@ export function fmtDate(d) {
 export function SourceBadge({ source, isMock }) {
   return (
     <span className={`source-badge ${isMock ? 'mock' : 'real'}`}>
-      {source}{isMock ? ' · mock' : ''}
+      {isMock ? 'N/A' : source}
     </span>
   )
 }
@@ -62,14 +62,24 @@ export function CompareTooltip({ active, payload, label }) {
   )
 }
 
-export function ChartWrap({ children, title, source, isMock }) {
+export function ChartWrap({ children, title, source, isMock, controls, zoomed, onReset }) {
   return (
     <div className="chart-wrap">
       <div className="chart-header">
-        <h3 className="chart-title">{title}</h3>
+        <div className="chart-header-left">
+          <h3 className="chart-title">{title}</h3>
+          {!isMock && controls}
+          {!isMock && zoomed && <button className="zoom-reset-btn" onClick={onReset}>↺ Reset</button>}
+        </div>
         {source && <SourceBadge source={source} isMock={isMock} />}
       </div>
-      {children}
+      {isMock ? (
+        <div className="chart-empty-state">
+          <span className="chart-empty-icon">⏳</span>
+          <p className="chart-empty-title">Coming soon</p>
+          <p className="chart-empty-sub">Pending authorisation from TenneT</p>
+        </div>
+      ) : children}
     </div>
   )
 }

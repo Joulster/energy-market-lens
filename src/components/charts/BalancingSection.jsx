@@ -1,9 +1,10 @@
 import {
   LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea,
   ResponsiveContainer,
 } from 'recharts'
 import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip } from './shared.jsx'
+import { useZoom } from './useZoom.js'
 
 function buildWeeklyStdDev(imbalanceDaily) {
   if (!imbalanceDaily?.length) return []
@@ -81,13 +82,16 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
   const mergedImbalance  = imbalanceData.map((d, i)  => ({ ...d, prevMidPrice: prevImbalance[i]?.midPrice }))
   const mergedStdDev     = weeklyStdDev.map((d, i)   => ({ ...d, prevStdDev:   prevWeeklyStdDev[i]?.stdDev }))
 
+  const zoom0 = useZoom(mergedImbalance, 'date')
+  const zoom1 = useZoom(mergedStdDev, 'week')
+
   return (
     <section className="asset-section">
       <h2 className="section-title">Balancing</h2>
 
-      <ChartWrap title="Imbalance Midprice NL (EUR/MWh)" source="TenneT" isMock={isMock}>
+      <ChartWrap title="Imbalance Midprice NL (EUR/MWh)" source="TenneT" isMock={isMock} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={mergedImbalance} {...chartProps}>
+          <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
@@ -95,13 +99,16 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="midPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="Imbalance Mid Price (EUR/MWh)" />
             {compareEnabled && <Line type="monotone" dataKey="prevMidPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" />}
+            {zoom0.refArea.left && zoom0.refArea.right && (
+              <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="Imbalance Price Volatility — Std Dev per Week (EUR/MWh)" source="TenneT" isMock={isMock}>
+      <ChartWrap title="Imbalance Price Volatility — Std Dev per Week (EUR/MWh)" source="TenneT" isMock={isMock} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <BarChart data={mergedStdDev} {...chartProps}>
+          <BarChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="week" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
@@ -109,6 +116,9 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
             <Legend wrapperStyle={legendStyle} />
             <Bar dataKey="stdDev" fill={COLORS.purple} name="Weekly std dev of imbalance price (EUR/MWh)" radius={[2, 2, 0, 0]} />
             {compareEnabled && <Bar dataKey="prevStdDev" fill={COLORS.purple} fillOpacity={0.35} name="Prev. period" radius={[2, 2, 0, 0]} />}
+            {zoom1.refArea.left && zoom1.refArea.right && (
+              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+            )}
           </BarChart>
         </ResponsiveContainer>
       </ChartWrap>

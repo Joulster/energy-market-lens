@@ -63,7 +63,8 @@ src/
     PromptEditorModal.jsx          # 3-tab modal for editing system prompts (narrative/regulatory/customerSignals)
     charts/
       shared.jsx                   # COLORS, ChartWrap, SourceBadge, fmtDate, chartProps, CompareTooltip
-      DayAheadSection.jsx          # 4 charts: daily avg, hourly shape heatmap, spread, negative hours
+      useZoom.js                   # Reusable drag-to-zoom hook for all time-series charts
+      DayAheadSection.jsx          # 2 charts: price (resolution switcher) + negative hours per week
       BalancingSection.jsx         # 2 charts: imbalance midprice, weekly std dev volatility
       AncillaryServicesSection.jsx # 3 charts: aFRR capacity, FCR clearing, aFRR energy up/down
 ```
@@ -84,6 +85,7 @@ src/
 - Previous series are overlaid as dashed/faded lines on all charts
 - `CompareTooltip` in `shared.jsx` shows current value + delta (coloured green/red) on hover
 - Prev data keys follow `prev + capitalise(key)` convention (e.g. `avg` → `prevAvg`)
+- DayAheadSection compare works across all resolutions (15m, 1h, 1d) — previous period is index-aligned
 
 ### Backend (`server/`)
 
@@ -139,19 +141,50 @@ Monthly Redis cache shared across all users and deploys:
 ## Charts (market-based grouping)
 
 ### Day-Ahead (`DayAheadSection`)
-- **Daily average price** (EUR/MWh) — line chart, ENTSO-E live
-- **Hourly price shape** — custom heatmap showing avg price by hour of day (green→red gradient)
-- **Peak/offpeak spread** — bar chart with zero reference line, signals battery charge/discharge windows
-- **Negative price hours per week** — bar chart, solar curtailment risk signal
+- **Day-Ahead Price NL** — resolution switcher in chart header (left of title):
+  - **15m** — line chart, raw 15-minute ENTSO-E price points (EUR/MWh)
+  - **1h** — HLA (High/Low/Average) range bar chart, hourly aggregates
+  - **1d** — HLA range bar chart, daily aggregates
+  - HLA bars: dark spine showing high→low range; cyan tick for average; blue cap for high; slate cap for low
+  - Compare previous period overlays a dashed average line + delta tooltips across all resolutions
+- **Negative price hours per week** — bar chart, X-axis shows ISO week numbers (W20, W21, …), solar curtailment risk signal
+
+**Removed charts** (were in earlier version, now removed):
+- Daily average price line chart — superseded by the 1d resolution on the price chart
+- Hourly price shape heatmap — redundant given the 1h resolution chart
+- Peak/offpeak spread — hid information by averaging over large blocks; misleading for FCR/battery use cases
 
 ### Balancing (`BalancingSection`)
-- **Imbalance midprice** — line chart, TenneT only (pending token)
-- **Imbalance price volatility** — weekly std dev bar chart, wind exposure signal
+- **Imbalance midprice** — line chart, TenneT only (pending token) → shows empty state
+- **Imbalance price volatility** — weekly std dev bar chart, wind exposure signal → shows empty state
 
 ### Ancillary Services (`AncillaryServicesSection`)
-- **aFRR capacity price** (EUR/MW/h) — TenneT only (pending token)
-- **FCR clearing price** (EUR/MW/h) — TenneT only (pending token)
-- **aFRR energy up/down** (EUR/MWh) — TenneT only (pending token)
+- **aFRR capacity price** (EUR/MW/h) — TenneT only (pending token) → shows empty state
+- **FCR clearing price** (EUR/MW/h) — TenneT only (pending token) → shows empty state
+- **aFRR energy up/down** (EUR/MWh) — TenneT only (pending token) → shows empty state
+
+**Source:** All Ancillary Services data comes from TenneT (not ENTSO-E — TenneT NL does not publish to ENTSO-E TP).
+
+---
+
+## Zoom (drag-to-select)
+
+All time-series charts support drag-to-zoom via `useZoom.js`:
+- Click and drag horizontally on any chart to select a zoom region
+- `↺ Reset` button appears in the chart header when zoomed
+- Uses `useRef` for in-progress selection state (avoids stale closures), `useState` only for the committed zoom domain and visual `ReferenceArea` overlay
+- `useZoom(data, xKey)` returns `{ displayData, handlers, refArea, isZoomed, reset }`
+- Hook called unconditionally (React rules) — one instance per chart
+
+---
+
+## Empty States (TenneT-pending charts)
+
+Charts that require a pending TenneT token show an empty state instead of mock or blank data:
+- Hourglass icon + "Coming soon" heading + "Pending authorisation from TenneT" subtext
+- Source badge shows **"N/A"** (not the source name) when data is unavailable
+- Implemented via `isMock` prop on `ChartWrap` — replaces `children` entirely with the empty state div
+- Controls (resolution switcher, zoom reset) are hidden when `isMock` is true
 
 ---
 
@@ -194,7 +227,7 @@ Monthly Redis cache shared across all users and deploys:
 ## Data Source Status & Roadmap
 
 ### Working now
-- ENTSO-E day-ahead prices (A44) — NL bidding zone `10YNL----------L`
+- ENTSO-E day-ahead prices (A44) — NL bidding zone `10YNL----------L`; full price range including negatives
 - ENTSO-E actual generation (A75) — solar (B19), wind (B16/B18)
 
 ### Pending TenneT developer API token
@@ -213,9 +246,15 @@ ENTSO-E A73/A85 returns error code 999 ("no matching data") for NL — this is e
 
 **Market-based chart grouping** (not asset-type): Charts are grouped by market (Day-Ahead / Balancing / Ancillary Services) rather than by asset. This matches how traders and asset managers think.
 
-**No mock data fallbacks**: Failed sources surface as error states with amber badges, not silently as fake numbers.
+**No mock data fallbacks**: Failed sources surface as error states (empty state or N/A badge), not silently as fake numbers.
 
-**Source badges on every chart**: Each chart shows a green "ENTSO-E · real" or amber "TenneT · error" badge.
+**HLA instead of OHLC for electricity prices**: Open/Close have no meaningful interpretation for power market prices. High/Low/Average correctly represents the price distribution within a time bucket.
+
+**Resolution switcher on Day-Ahead chart**: Rather than separate charts for daily/hourly/raw, a single chart with a 15m/1h/1d switcher lets the user zoom in or out on the same price series. The chart type changes (line for 15m; HLA range bars for 1h and 1d) to match the appropriate level of detail.
+
+**ISO week numbers on negative hours chart**: Week start dates (e.g. "05/14") are hard to parse quickly. W20/W21 notation matches how traders think about forward calendar weeks.
+
+**Source badges on every chart**: Each chart shows the data source. When data is unavailable, the badge shows "N/A" — never the source name, since no data is actually being sourced.
 
 **Errors propagate to Claude**: `aggregateWeeklySummary()` passes the `errors` object. Claude is instructed not to fabricate values for unavailable sources — returning `null` for those sections instead.
 
@@ -224,3 +263,5 @@ ENTSO-E A73/A85 returns error code 999 ("no matching data") for NL — this is e
 **Single-container deployment**: Vite builds to `dist/`, Express serves it as static files. Same process, same port, no Nginx. Vite dev proxy is conditional — disabled in production since frontend and backend share the same origin.
 
 **Shared Redis cache**: Research results cached in Redis keyed by month + config fingerprint. All users share the same cache, so a team of 10 pays for one Sonnet call per month, not ten.
+
+**Negative price fix**: ENTSO-E XML parser regex uses `[-\d.]+` (not `[\d.]+`) so negative prices are correctly captured. All CET bucketing uses `Europe/Amsterdam` locale formatters, not UTC, to correctly handle NL delivery days.
