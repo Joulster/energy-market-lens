@@ -58,7 +58,7 @@ export async function fetchNarrative(marketData, systemPrompt, startDate, endDat
     const res = await fetch('/api/narrative', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketData, systemPrompt, startDate, endDate }),
+      body: JSON.stringify({ marketData, systemPrompt, startDate, endDate, forceRefresh }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = await res.json()

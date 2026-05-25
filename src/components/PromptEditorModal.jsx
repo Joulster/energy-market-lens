@@ -40,7 +40,7 @@ export default function PromptEditorModal({ prompts, defaults, onSave, onClose }
 
         {/* Header */}
         <div className="prompt-modal-header">
-          <span className="prompt-modal-title">Edit System Prompts</span>
+          <span className="prompt-modal-title">Test a Prompt</span>
           <button className="prompt-modal-close" onClick={onClose} title="Close">✕</button>
         </div>
 
@@ -72,12 +72,12 @@ export default function PromptEditorModal({ prompts, defaults, onSave, onClose }
               spellCheck={false}
             />
             <p className="prompt-note">
-              Changes apply on next Refresh. Edits are not persisted between page reloads.
+              Changes apply on next Refresh. Edits are session-only — to make a prompt permanent, update it in <code>server/prompts.js</code>.
               {tab.key !== 'narrative' && ' Placeholders [TODAY DATE], [CUTOFF DATE], [SOURCE LIST] are replaced at runtime.'}
             </p>
             <div className="prompt-modal-actions">
               <button className="prompt-save-btn" onClick={() => handleSave(tab.key)}>
-                {savedKey === tab.key ? '✓ Saved' : 'Save prompt'}
+                {savedKey === tab.key ? '✓ Applied' : 'Try Now'}
               </button>
               <button
                 className="prompt-reset-btn"

@@ -67,12 +67,22 @@ app.get('/api/afrr', async (req, res) => {
   }
 })
 
+const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
+
 app.post('/api/narrative', async (req, res) => {
   try {
-    const { marketData, systemPrompt, startDate, endDate } = req.body
+    const { marketData, systemPrompt, startDate, endDate, forceRefresh } = req.body
     if (!marketData) return res.status(400).json({ error: 'marketData required' })
+
+    const fingerprint = JSON.stringify({ startDate, endDate, prompt: systemPrompt ?? '' })
+    if (!forceRefresh) {
+      const hit = await getCached('narrative', fingerprint)
+      if (hit) return res.json({ ok: true, narrative: hit.items, fromCache: true, cachedAt: hit.cachedAt })
+    }
+
     const narrative = await generateNarrative(marketData, systemPrompt, startDate, endDate)
-    res.json({ ok: true, narrative })
+    await setCached('narrative', fingerprint, narrative, NARRATIVE_TTL)
+    res.json({ ok: true, narrative, fromCache: false, cachedAt: new Date().toISOString() })
   } catch (err) {
     console.error('narrative error:', err.message)
     res.json({ ok: false, error: err.message, narrative: null })

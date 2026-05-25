@@ -46,13 +46,13 @@ export async function getCached(namespace, fingerprint) {
   return fallback.get(key) ?? null
 }
 
-export async function setCached(namespace, fingerprint, items) {
+export async function setCached(namespace, fingerprint, items, ttl = ttlSeconds()) {
   const key   = buildKey(namespace, fingerprint)
   const entry = { items, cachedAt: new Date().toISOString() }
   const redis = getRedis()
   if (redis) {
     try {
-      await redis.set(key, JSON.stringify(entry), 'EX', ttlSeconds())
+      await redis.set(key, JSON.stringify(entry), 'EX', ttl)
       return
     } catch (err) {
       console.error('Redis set error:', err.message)
