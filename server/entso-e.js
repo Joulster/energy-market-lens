@@ -97,6 +97,27 @@ function aggregateToDailyAvg(points) {
 }
 
 
+function computeHourlyHLA(points) {
+  const byDayHour = {}
+  for (const { ts, price } of points) {
+    const key = `${cetDate(ts)}|${String(cetHour(ts)).padStart(2, '0')}`
+    if (!byDayHour[key]) byDayHour[key] = []
+    byDayHour[key].push(price)
+  }
+  return Object.entries(byDayHour)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, prices]) => {
+      const [date, hour] = key.split('|')
+      return {
+        date,
+        hour: parseInt(hour, 10),
+        avg:  prices.reduce((s, p) => s + p, 0) / prices.length,
+        high: Math.max(...prices),
+        low:  Math.min(...prices),
+      }
+    })
+}
+
 function computeDailyHLA(points) {
   const byDay = {}
   for (const { ts, price } of points) {
@@ -175,6 +196,7 @@ export async function fetchDayAheadPrices(startDate, endDate) {
   return {
     dailyAvg: aggregateToDailyAvg(points),
     dailyHLA: computeDailyHLA(points),
+    hourlyHLA: computeHourlyHLA(points),
     peakOffpeakSpread: computePeakOffpeakSpread(points),
     negativeHoursPerWeek: countNegativeHours(points),
     rawPoints: points,

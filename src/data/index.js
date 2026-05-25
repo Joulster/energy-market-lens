@@ -98,6 +98,12 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
   const periodAvg  = mean(hlaSlice, 'avg')
   const negHours   = negHoursSlice.reduce((s, d) => s + (d.count || 0), 0)
 
+  // Hourly HLA only for days where the daily low was negative
+  const negativeDays = new Set(hlaSlice.filter(d => d.low < 0).map(d => d.date))
+  const hourlyHLAForNegativeDays = (dayAhead?.hourlyHLA ?? [])
+    .filter(d => d.date >= cutoffStr && negativeDays.has(d.date))
+    .map(d => ({ date: d.date, hour: d.hour, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) }))
+
   return {
     period: { from: cutoffStr, to: todayStr },
     dayAheadPrice: {
@@ -107,6 +113,7 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
       rangeEurMwh: periodHigh != null && periodLow != null ? periodHigh - periodLow : null,
       negativeHours: negHours,
       dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) })),
+      hourlyHLAForNegativeDays,
     },
     negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),
   }

@@ -22,6 +22,20 @@ export async function generateNarrative(marketData, systemPromptOverride, startD
     ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}`).join('\n')
     : '  N/A'
 
+  const hourlyHLAStr = dayAheadPrice?.hourlyHLAForNegativeDays?.length
+    ? (() => {
+        const byDate = {}
+        for (const d of dayAheadPrice.hourlyHLAForNegativeDays) {
+          if (!byDate[d.date]) byDate[d.date] = []
+          byDate[d.date].push(d)
+        }
+        return Object.entries(byDate)
+          .map(([date, hours]) =>
+            `  ${date}:\n` + hours.map(h => `    ${String(h.hour).padStart(2,'0')}:00  avg ${fmt(h.avg)}, high ${fmt(h.high)}, low ${fmt(h.low)}`).join('\n')
+          ).join('\n')
+      })()
+    : null
+
   const negHoursStr = negativeHoursPerWeek?.length
     ? negativeHoursPerWeek.map(d => `  ${d.week}: ${d.count} hours`).join('\n')
     : '  N/A'
@@ -36,7 +50,7 @@ Chart 1 — Day-Ahead Price NL (EUR/MWh):
 - Negative price hours total: ${dayAheadPrice?.negativeHours ?? 'N/A'}
 - Daily HLA breakdown:
 ${dailyHLAStr}
-
+${hourlyHLAStr ? `- Hourly HLA for days with negative prices:\n${hourlyHLAStr}` : ''}
 Chart 2 — Negative Price Hours per Week:
 ${negHoursStr}
 
