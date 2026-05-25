@@ -21,48 +21,61 @@ app.use(express.static(distDir))
 
 const PORT = process.env.PORT || 3001
 
+// ── Market data cache helpers ─────────────────────────────────────────────────
+// Historical ranges (endDate < today) never change → 24-hour TTL.
+// Queries including today may update intraday → 1-hour TTL.
+function marketDataTTL(endDate) {
+  if (!endDate) return 3600
+  const today = new Date().toISOString().slice(0, 10)
+  return endDate < today ? 86400 : 3600
+}
+
+async function cachedMarketRoute(res, namespace, startDate, endDate, fetcher) {
+  const fingerprint = `${startDate ?? 'default'}|${endDate ?? 'default'}`
+  const hit = await getCached(namespace, fingerprint)
+  if (hit) return res.json({ ok: true, data: hit.items, fromCache: true })
+  try {
+    const data = await fetcher()
+    await setCached(namespace, fingerprint, data, marketDataTTL(endDate))
+    res.json({ ok: true, data })
+  } catch (err) {
+    console.error(`${namespace} error:`, err.message)
+    res.json({ ok: false, error: err.message, data: null })
+  }
+}
+
 app.get('/health', (req, res) => res.json({ ok: true }))
 
 app.get('/api/day-ahead-prices', async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query
-    const data = await fetchDayAheadPrices(startDate, endDate)
-    res.json({ ok: true, data })
-  } catch (err) {
-    console.error('day-ahead-prices error:', err.message)
-    res.json({ ok: false, error: err.message, data: null })
-  }
+  const { startDate, endDate } = req.query
+  await cachedMarketRoute(res, 'market:day-ahead', startDate, endDate,
+    () => fetchDayAheadPrices(startDate, endDate))
 })
 
 app.get('/api/actual-generation', async (req, res) => {
-  try {
-    const { startDate, endDate } = req.query
-    const data = await fetchActualGeneration(startDate, endDate)
-    res.json({ ok: true, data })
-  } catch (err) {
-    console.error('actual-generation error:', err.message)
-    res.json({ ok: false, error: err.message, data: null })
-  }
+  const { startDate, endDate } = req.query
+  await cachedMarketRoute(res, 'market:generation', startDate, endDate,
+    () => fetchActualGeneration(startDate, endDate))
 })
 
 app.get('/api/imbalance-prices', async (req, res) => {
+  const { startDate, endDate } = req.query
+  // TenneT CSV API is decommissioned — skip cache, return error immediately
   try {
-    const { startDate, endDate } = req.query
     const data = await fetchImbalancePrices(startDate, endDate)
     res.json({ ok: true, data })
-  } catch (err) {
-    // TenneT CSV API is decommissioned — awaiting new developer API token
+  } catch {
     res.json({ ok: false, error: 'TenneT API unavailable — token pending', data: null })
   }
 })
 
 app.get('/api/afrr', async (req, res) => {
+  const { startDate, endDate } = req.query
+  // TenneT NL does not publish A73/A85 to ENTSO-E TP — skip cache, return error immediately
   try {
-    const { startDate, endDate } = req.query
     const data = await fetchBalancingData(startDate, endDate)
     res.json({ ok: true, data })
-  } catch (err) {
-    // TenneT NL does not publish A73/A85 balancing data to ENTSO-E TP
+  } catch {
     res.json({ ok: false, error: 'Balancing data unavailable — TenneT token pending', data: null })
   }
 })
