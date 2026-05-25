@@ -94,7 +94,7 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
           <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="midPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="Imbalance Mid Price (EUR/MWh)" />
@@ -111,7 +111,7 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
           <BarChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="week" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
             <Bar dataKey="stdDev" fill={COLORS.purple} name="Weekly std dev of imbalance price (EUR/MWh)" radius={[2, 2, 0, 0]} />

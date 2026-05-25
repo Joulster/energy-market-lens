@@ -304,7 +304,7 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
             <ComposedChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} barCategoryGap="1%" style={{ cursor: 'crosshair', userSelect: 'none' }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={hlaDomain} />
+              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={hlaDomain} tickFormatter={v => Number(v).toFixed(2)} />
               <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
               <Tooltip content={<HLATooltip resolution={resolution} />} />
               {compareEnabled && <Legend wrapperStyle={legendStyle} />}
@@ -318,7 +318,7 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
             <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="ts" tickFormatter={fmtCetDateTimeShort} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={['auto', 'auto']} />
+              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={['auto', 'auto']} tickFormatter={v => Number(v).toFixed(2)} />
               <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
               <Tooltip content={<RawPriceTooltip resolution={resolution} />} />
               {compareEnabled && <Legend wrapperStyle={legendStyle} />}

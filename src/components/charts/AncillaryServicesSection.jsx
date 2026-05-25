@@ -76,7 +76,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
           <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="afrrCapacityPrice" stroke={COLORS.blue} dot={false} strokeWidth={2} name="aFRR Capacity Price (EUR/MW/h)" />
@@ -93,7 +93,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
           <LineChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="fcrPrice" stroke={COLORS.purple} dot={false} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" />
@@ -110,7 +110,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
           <LineChart data={zoom2.displayData} {...chartProps} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} />
+            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
             <Line type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)" />
