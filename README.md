@@ -1,6 +1,6 @@
 # Energy Market Lens
 
-A full-stack dashboard for monitoring Dutch energy markets in real time. Built for energy traders, asset managers, and VPP operators who need a single view across day-ahead prices, balancing markets, and ancillary services — with AI-generated market summaries, regulatory monitoring, and customer signal tracking.
+A full-stack dashboard for monitoring Dutch energy markets in real time. Built for product managers at VPP and energy software companies who want to stay close to the markets their customers operate in — covering day-ahead prices, balancing markets, and ancillary services, with AI-generated market summaries, regulatory monitoring, and customer signal tracking.
 
 ---
 
