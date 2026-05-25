@@ -70,7 +70,7 @@ export async function fetchNarrative(marketData, systemPrompt, startDate, endDat
   }
 }
 
-export function aggregateWeeklySummary(data, startDate, endDate) {
+export function buildNarrativePayload(data, startDate, endDate) {
   const { dayAhead, generation, imbalance, afrr, errors = {} } = data
   let cutoffStr, todayStr
   if (startDate && endDate) {

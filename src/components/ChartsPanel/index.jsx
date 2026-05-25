@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import DayAheadSection from '../charts/DayAheadSection.jsx'
 import BalancingSection from '../charts/BalancingSection.jsx'
 import AncillaryServicesSection from '../charts/AncillaryServicesSection.jsx'
-import { aggregateWeeklySummary, fetchNarrative, loadAllMarketData } from '../../data/index.js'
+import { buildNarrativePayload, fetchNarrative, loadAllMarketData } from '../../data/index.js'
 import { RANGE_OPTIONS, computeDates, computePrevDates } from '../../data/dateRange.js'
 
 export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRangeChange, style }) {
@@ -39,7 +39,7 @@ export default function ChartsPanel({ data, narrativePrompt, selectedRange, onRa
     const datesSnapshot  = { ...computeDates(selectedRange) }
     const forceRefresh   = narrative !== undefined  // true when Regenerate, false on first Generate
     try {
-      const summary = aggregateWeeklySummary(data, datesSnapshot.startDate, datesSnapshot.endDate)
+      const summary = buildNarrativePayload(data, datesSnapshot.startDate, datesSnapshot.endDate)
       const result  = await fetchNarrative(summary, narrativePrompt, datesSnapshot.startDate, datesSnapshot.endDate, forceRefresh)
       if (result.ok) {
         setNarrative(result.narrative)
