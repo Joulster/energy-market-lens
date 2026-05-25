@@ -147,7 +147,6 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
     },
     wind: {
       dayAheadAvgPrice:            periodAvg,
-      nlGridTotalAvgGenMW:         mean(windSlice, 'avg'),
       imbalanceMidPriceStdDev:     imbalanceStdDev,
     },
   }

@@ -44,10 +44,11 @@ Battery / ancillary services:
 - FCR clearing price avg: ${fmt(battery?.fcrPriceAvg)} EUR/MW/h
 - Imbalance midprice avg: ${fmt(battery?.imbalanceMidPriceAvg)} EUR/MWh
 
-NL grid generation (market-level context only, not individual operator portfolios):
+NL grid solar generation (market-level context only, not individual operator portfolios):
 - Solar NL total avg generation: ${fmt(solar?.nlGridTotalAvgGenMW)} MW
-- Wind NL total avg generation: ${fmt(wind?.nlGridTotalAvgGenMW)} MW
-- Wind imbalance midprice std dev: ${fmt(wind?.imbalanceMidPriceStdDev)} EUR/MWh
+
+Wind:
+- Imbalance midprice std dev: ${fmt(wind?.imbalanceMidPriceStdDev)} EUR/MWh
 
 Write the briefing JSON now.`
 
