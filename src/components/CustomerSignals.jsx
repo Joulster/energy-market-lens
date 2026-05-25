@@ -196,16 +196,14 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
 
           {/* Section 4: Lookback */}
           <p className="reg-settings-label cs-settings-label">Lookback Window</p>
-          <div className="cs-lookback-row">
-            <input
-              type="number"
-              className="reg-input cs-lookback-input"
-              min={30}
-              max={180}
-              value={lookback}
-              onChange={e => { setLookback(Math.min(180, Math.max(30, Number(e.target.value)))); setDirty(true) }}
-            />
-            <span className="cs-lookback-unit">days</span>
+          <div className="range-selector">
+            {[30, 60, 90, 180].map(d => (
+              <button
+                key={d}
+                className={`range-option${lookback === d ? ' active' : ''}`}
+                onClick={() => { setLookback(d); setDirty(true) }}
+              >{d}d</button>
+            ))}
           </div>
           <div className="reg-settings-footer">
             <button className={`reg-regenerate-btn${dirty ? ' active' : ''}`} onClick={() => { setShowSettings(false); handleRefresh() }}>
