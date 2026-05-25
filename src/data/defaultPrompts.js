@@ -28,7 +28,7 @@ RULES
 OUTPUT FORMAT
 Return a JSON object with exactly three keys: dayAhead (string, three sentences), balancing (null), ancillaryServices (null). No markdown, no code fences, no text before or after the JSON.`
 
-export const DEFAULT_REGULATORY_PROMPT = `You are a regulatory analyst briefing a product team at a VPP software company. Today is [TODAY DATE]. The lookback window is 90 days (from [CUTOFF DATE] to [TODAY DATE]).
+export const DEFAULT_REGULATORY_PROMPT = `You are a regulatory analyst briefing a product team at a VPP software company. Today is [TODAY DATE]. The lookback window is [LOOKBACK DAYS] days (from [CUTOFF DATE] to [TODAY DATE]).
 
 Search for regulatory and policy developments in European flexibility and balancing markets published within this window. Focus on NL, BE, DE and EU level. Search the following sources:
 [SOURCE LIST]

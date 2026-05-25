@@ -132,6 +132,7 @@ export async function generateRegulatoryWatch(enabledSources, lookback, systemPr
   const systemPrompt = basePrompt
     .replace(/\[TODAY DATE\]/g, today)
     .replace(/\[CUTOFF DATE\]/g, cutoffStr)
+    .replace(/\[LOOKBACK DAYS\]/g, lookback)
     .replace(/\[SOURCE LIST\]/g, sourceList)
 
   const message = await getClient().messages.create({
