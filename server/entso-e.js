@@ -153,8 +153,9 @@ function computePeakOffpeakSpread(points) {
     })
 }
 
-function countNegativeHours(points) {
-  // Aggregate to hourly averages in CET (handles both PT60M and PT15M resolution)
+function aggregateHourlyAvgs(points) {
+  // Shared first pass: aggregate 15m points to hourly CET averages
+  // Returns { [date|hour]: avgPrice }
   const hourSums   = {}
   const hourCounts = {}
   for (const { ts, price } of points) {
@@ -162,11 +163,16 @@ function countNegativeHours(points) {
     hourSums[key]   = (hourSums[key]   || 0) + price
     hourCounts[key] = (hourCounts[key] || 0) + 1
   }
-  // Count hours with negative average price, bucketed by week
+  return Object.fromEntries(
+    Object.entries(hourSums).map(([key, total]) => [key, total / hourCounts[key]])
+  )
+}
+
+function countNegativeHours(points) {
+  const hourlyAvgs = aggregateHourlyAvgs(points)
   const byWeek = {}
-  for (const [key, total] of Object.entries(hourSums)) {
+  for (const [key, avgPrice] of Object.entries(hourlyAvgs)) {
     const [day] = key.split('|')
-    const avgPrice  = total / hourCounts[key]
     const d         = new Date(day + 'T00:00:00')
     const weekStart = new Date(d)
     weekStart.setDate(d.getDate() - d.getDay()) // Sunday
@@ -177,6 +183,18 @@ function countNegativeHours(points) {
   return Object.entries(byWeek)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([week, count]) => ({ week, count }))
+}
+
+function computeDailyNegativeHours(points) {
+  // Same hourly aggregation as countNegativeHours — per day instead of per week
+  // Guaranteed to sum to the same total as countNegativeHours over any date range
+  const hourlyAvgs = aggregateHourlyAvgs(points)
+  const byDay = {}
+  for (const [key, avgPrice] of Object.entries(hourlyAvgs)) {
+    const [day] = key.split('|')
+    if (avgPrice < 0) byDay[day] = (byDay[day] || 0) + 1
+  }
+  return byDay // { 'YYYY-MM-DD': count }
 }
 
 export async function fetchDayAheadPrices(startDate, endDate) {
@@ -199,6 +217,7 @@ export async function fetchDayAheadPrices(startDate, endDate) {
     hourlyHLA: computeHourlyHLA(points),
     peakOffpeakSpread: computePeakOffpeakSpread(points),
     negativeHoursPerWeek: countNegativeHours(points),
+    dailyNegativeHours: computeDailyNegativeHours(points),
     rawPoints: points,
   }
 }
