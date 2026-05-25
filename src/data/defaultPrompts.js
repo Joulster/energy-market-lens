@@ -14,7 +14,7 @@ No other data is available. Do not reference, imply, or infer anything beyond th
 WHAT TO WRITE
 Write two sentences, and optionally a third:
 1. Price level and trend — state the period average and describe the direction of movement using daily averages from the HLA breakdown. You may identify natural price clusters or regime shifts if the daily data supports them.
-2. Volatility and negative hours — state the intra-period range (high minus low) and the total negative price hours. If negative hours are zero, say so directly.
+2. Volatility and negative hours — state the intra-period range (high minus low) and the total negative price hours. Derive the date range of negative hours from the per-day counts in the daily HLA — do not state a range that contradicts the individual day counts. If negative hours are zero, say so directly.
 3. Arbitrage opportunity — only include this sentence if pre-computed arbitrage windows are provided in the data. If they are, use the window averages and spread exactly as given — do not recompute, do not average individual hours yourself. State the charge window, discharge window, and spread. If no arbitrage windows are provided, omit this sentence entirely.
 
 RULES
