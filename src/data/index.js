@@ -178,7 +178,8 @@ export function buildNarrativePayload(data, startDate, endDate) {
       rangeEurMwh: periodHigh != null && periodLow != null ? periodHigh - periodLow : null,
       negativeHours: negHours,
       dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2), negativeHours: dailyNegHours[d.date] ?? 0 })),
-      hourlyHLAForNegativeDays,
+      // hourlyHLAForNegativeDays intentionally excluded — used above to compute
+      // bestArbitrageWindow but not needed in the Claude prompt itself.
       bestArbitrageWindow,
     },
     negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),
