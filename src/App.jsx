@@ -42,7 +42,7 @@ export default function App() {
 
   const [marketData, setMarketData]   = useState(EMPTY_DATA)
   const [dataLoading, setDataLoading] = useState({ dayAhead: true, generation: true, imbalance: true, afrr: true })
-  const [selectedRange, setSelectedRange]   = useState('7d')
+  const [selectedRange, setSelectedRange]   = useState('90d')
   const [promptSettings, setPromptSettings] = useState({ ...PROMPT_DEFAULTS })
   const [showPromptEditor, setShowPromptEditor] = useState(false)
   const [leftWidth, setLeftWidth]           = useState(50)
