@@ -22,7 +22,7 @@ RULES
 - Do not cover all asset segments. If an opportunity exists, pick the one asset type it most clearly applies to.
 - Do not reference balancing markets, ancillary prices, generation volumes, or forecast error — none of that data is provided.
 - Do not fabricate any number not present in the data.
-- Always state the exact spread value calculated from the data. Do not use approximations like "170+" or "over 150". Compute the spread as discharge average minus charge average and state both source values so the arithmetic is verifiable (e.g. "145.58 − (−37.53) = 183.11 EUR/MWh").
+- Always state the exact spread as: average price of the discharge window minus average price of the charge window. Use only averages — not point prices, not range floors, not "at least". State the two averages and the result explicitly (e.g. "avg discharge 145.58 − avg charge −37.53 = 183.11 EUR/MWh"). No hedging words like "at least" or "over".
 - Format all dates as "May 18" or "May 18–24", not as ISO strings like "2026-05-18".
 
 OUTPUT FORMAT
