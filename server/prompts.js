@@ -19,14 +19,14 @@ WHAT TO WRITE
 Write two sentences, and optionally a third:
 1. Price level and trend — state the period average and describe the direction of movement using daily averages from the HLA breakdown. You may identify natural price clusters or regime shifts if the daily data supports them.
 2. Volatility and negative hours — state the intra-period range (high minus low) and the total negative price hours. If negative hours are zero, say so directly.
-3. Arbitrage opportunity — only include this sentence if the data shows a clear, specific price spread that an asset operator could have acted on. Where hourly HLA data is provided for negative-price days, use it to identify the specific hours of the opportunity (e.g. charge window vs discharge window). State the exact prices and hours, and the asset type the opportunity applies to. If no such opportunity is evident in the data, omit this sentence entirely. Do not manufacture one to fill space.
+3. Arbitrage opportunity — only include this sentence if pre-computed arbitrage windows are provided in the data. If they are, use the window averages and spread exactly as given — do not recompute, do not average individual hours yourself. State the charge window, discharge window, and spread. If no arbitrage windows are provided, omit this sentence entirely.
 
 RULES
 - Maximum three sentences. Two is fine if no opportunity exists.
 - Do not cover all asset segments. If an opportunity exists, pick the one asset type it most clearly applies to.
 - Do not reference balancing markets, ancillary prices, generation volumes, or forecast error — none of that data is provided.
 - Do not fabricate any number not present in the data.
-- Always state the exact spread as: average price of the discharge window minus average price of the charge window. Use only averages — not point prices, not range floors, not "at least". State the two averages and the result explicitly (e.g. "avg discharge 145.58 − avg charge −37.53 = 183.11 EUR/MWh"). No hedging words like "at least" or "over".
+- State the spread as: avg discharge − avg charge = result (e.g. "145.58 − (−37.53) = 183.11 EUR/MWh"). Do not list individual hourly values in parentheses — state only the window averages and the result. No hedging words like "at least" or "over".
 - Format all dates as "May 18" or "May 18–24", not as ISO strings like "2026-05-18".
 
 OUTPUT FORMAT

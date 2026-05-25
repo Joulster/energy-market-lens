@@ -112,6 +112,45 @@ export function buildNarrativePayload(data, startDate, endDate) {
     .filter(d => d.date >= cutoffStr && negativeDays.has(d.date))
     .map(d => ({ date: d.date, hour: d.hour, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) }))
 
+  // Pre-compute charge/discharge window averages per negative-price day
+  // Charge window = contiguous block of hours with avg < 0
+  // Discharge window = highest-average contiguous 3-hour block on the same day
+  const arbitrageWindows = []
+  for (const date of [...negativeDays].sort()) {
+    const dayHours = hourlyHLAForNegativeDays.filter(d => d.date === date).sort((a, b) => a.hour - b.hour)
+    const negHours = dayHours.filter(d => d.avg < 0)
+    if (!negHours.length) continue
+
+    const chargeAvg = +(negHours.reduce((s, d) => s + d.avg, 0) / negHours.length).toFixed(2)
+    const chargeStart = negHours[0].hour
+    const chargeEnd   = negHours[negHours.length - 1].hour
+
+    // Best 3-hour discharge window (highest avg) after the charge block ends
+    const postCharge = dayHours.filter(d => d.hour > chargeEnd)
+    let bestDischarge = null
+    for (let i = 0; i <= postCharge.length - 3; i++) {
+      const window = postCharge.slice(i, i + 3)
+      const avg = +(window.reduce((s, d) => s + d.avg, 0) / 3).toFixed(2)
+      if (!bestDischarge || avg > bestDischarge.avg) {
+        bestDischarge = { avg, startHour: window[0].hour, endHour: window[2].hour }
+      }
+    }
+    // Fall back to single best hour if fewer than 3 post-charge hours exist
+    if (!bestDischarge && postCharge.length) {
+      const best = postCharge.reduce((a, b) => a.avg > b.avg ? a : b)
+      bestDischarge = { avg: best.avg, startHour: best.hour, endHour: best.hour }
+    }
+    if (!bestDischarge) continue
+
+    const spread = +(bestDischarge.avg - chargeAvg).toFixed(2)
+    arbitrageWindows.push({
+      date,
+      chargeWindow:    { startHour: chargeStart, endHour: chargeEnd, avgPrice: chargeAvg },
+      dischargeWindow: { startHour: bestDischarge.startHour, endHour: bestDischarge.endHour, avgPrice: bestDischarge.avg },
+      spread,
+    })
+  }
+
   return {
     period: { from: cutoffStr, to: todayStr },
     dayAheadPrice: {
@@ -122,6 +161,7 @@ export function buildNarrativePayload(data, startDate, endDate) {
       negativeHours: negHours,
       dailyHLA:    hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2), negativeHours: negHoursByDay[d.date] ?? 0 })),
       hourlyHLAForNegativeDays,
+      arbitrageWindows,
     },
     negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),
   }
