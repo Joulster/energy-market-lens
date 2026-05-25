@@ -93,7 +93,6 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
   const afrrSlice      = slice(afrr?.daily)
   const imbalanceSlice = slice(imbalance?.daily)
   const dayAheadSlice  = slice(dayAhead?.dailyAvg)
-  const spreadSlice    = slice(dayAhead?.peakOffpeakSpread)
   const solarSlice     = slice(generation?.solar)
   const windSlice      = slice(generation?.wind)
 
@@ -125,7 +124,6 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
       afrrDownEnergyAvg:    mean(afrrSlice, 'afrrDownEnergyPrice'),
       fcrPriceAvg:          mean(afrrSlice, 'fcrPrice'),
       imbalanceMidPriceAvg: imbalanceMean,
-      dayAheadSpreadAvg:    mean(spreadSlice, 'spread'),
       negativeHoursCount:   imbalanceSlice.reduce((s, d) => s + (d.negativeHours || 0), 0),
     },
     solar: {
