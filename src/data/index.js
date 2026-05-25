@@ -92,7 +92,7 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
 
   const afrrSlice      = slice(afrr?.daily)
   const imbalanceSlice = slice(imbalance?.daily)
-  const dayAheadSlice  = slice(dayAhead?.dailyAvg)
+  const hlaSlice       = slice(dayAhead?.dailyHLA)
   const negHoursSlice  = (dayAhead?.negativeHoursPerWeek ?? []).filter(d => d.week >= cutoffStr)
   const solarSlice     = slice(generation?.solar)
   const windSlice      = slice(generation?.wind)
@@ -104,6 +104,11 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
   const imbalanceStdDev = imbalanceMidVals.length && imbalanceMean != null
     ? Math.sqrt(imbalanceMidVals.reduce((s, v) => s + (v - imbalanceMean) ** 2, 0) / imbalanceMidVals.length)
     : null
+
+  const periodHigh = hlaSlice.length ? Math.max(...hlaSlice.map(d => d.high)) : null
+  const periodLow  = hlaSlice.length ? Math.min(...hlaSlice.map(d => d.low))  : null
+  const periodAvg  = mean(hlaSlice, 'avg')
+  const negHours   = negHoursSlice.reduce((s, d) => s + (d.count || 0), 0)
 
   // Map internal keys to human-readable source names
   const SOURCE_LABELS = {
@@ -119,22 +124,30 @@ export function aggregateWeeklySummary(data, startDate, endDate) {
   return {
     period: { from: cutoffStr, to: todayStr },
     unavailable,
+    dayAheadPrice: {
+      avgEurMwh:         periodAvg,
+      highEurMwh:        periodHigh,
+      lowEurMwh:         periodLow,
+      rangeEurMwh:       periodHigh != null && periodLow != null ? periodHigh - periodLow : null,
+      negativeHours:     negHours,
+      dailyHLA:          hlaSlice.map(d => ({ date: d.date, avg: +d.avg.toFixed(2), high: +d.high.toFixed(2), low: +d.low.toFixed(2) })),
+    },
     battery: {
       afrrCapacityPriceAvg: mean(afrrSlice, 'afrrCapacityPrice'),
       afrrUpEnergyAvg:      mean(afrrSlice, 'afrrUpEnergyPrice'),
       afrrDownEnergyAvg:    mean(afrrSlice, 'afrrDownEnergyPrice'),
       fcrPriceAvg:          mean(afrrSlice, 'fcrPrice'),
       imbalanceMidPriceAvg: imbalanceMean,
-      negativeHoursCount:   negHoursSlice.reduce((s, d) => s + (d.count || 0), 0),
+      negativeHoursCount:   negHours,
     },
     solar: {
-      dayAheadAvgPrice:      mean(dayAheadSlice, 'avg'),
-      negativeHoursThisWeek: negHoursSlice.reduce((s, d) => s + (d.count || 0), 0),
+      dayAheadAvgPrice:      periodAvg,
+      negativeHoursThisWeek: negHours,
       avgGenMW:              mean(solarSlice, 'avg'),
     },
     wind: {
-      dayAheadAvgPrice:       mean(dayAheadSlice, 'avg'),
-      avgGenMW:               mean(windSlice, 'avg'),
+      dayAheadAvgPrice:        periodAvg,
+      avgGenMW:                mean(windSlice, 'avg'),
       imbalanceMidPriceStdDev: imbalanceStdDev,
     },
   }
