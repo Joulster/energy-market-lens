@@ -13,7 +13,7 @@ A full-stack dashboard for monitoring Dutch energy markets, built for a **Head o
 | Frontend | React 18 + Vite 5, Recharts, plain CSS |
 | Backend | Express (Node 18+, ESM), port via `$PORT` env var (default 3001) |
 | AI | `@anthropic-ai/sdk` — Claude Haiku 4.5 (narrative) + Claude Sonnet 4.6 (regulatory/customer signals + web search) |
-| Cache | Redis (ioredis) — monthly cache for research calls; falls back to in-memory Map when `REDIS_URL` is not set |
+| Cache | Redis (ioredis) — market data (1h/24h TTL) + research calls (monthly TTL); falls back to in-memory Map when `REDIS_URL` is not set |
 | Dev proxy | Vite proxies `/api/*` → `http://localhost:3001` (dev only; disabled in production) |
 | Deployment | Docker (single container) on Railway — Express serves built React frontend from `dist/` |
 
@@ -52,7 +52,7 @@ src/
   App.css                          # Single dark-theme stylesheet
   main.jsx                         # Vite entry
   data/
-    index.js                       # loadAllMarketData(), aggregateWeeklySummary(), fetchNarrative()
+    index.js                       # loadSourceData(), loadAllMarketData(), buildNarrativePayload(), fetchNarrative()
     dateRange.js                   # RANGE_OPTIONS, computeDates(), computePrevDates()
     defaultPrompts.js              # Client-side copies of all 3 system prompts (with placeholders) for Reset
   components/
@@ -62,7 +62,7 @@ src/
     CustomerSignals.jsx            # Self-contained; accepts customerSignalsPrompt prop + configurable lookback
     PromptEditorModal.jsx          # 3-tab modal for editing system prompts (narrative/regulatory/customerSignals)
     charts/
-      shared.jsx                   # COLORS, ChartWrap, SourceBadge, fmtDate, chartProps, CompareTooltip
+      shared.jsx                   # COLORS, ChartWrap (isMock + isLoading), SourceBadge, fmtDate, chartProps, CompareTooltip
       useZoom.js                   # Reusable drag-to-zoom hook for all time-series charts
       DayAheadSection.jsx          # 2 charts: price (resolution switcher) + negative hours per week
       BalancingSection.jsx         # 2 charts: imbalance midprice, weekly std dev volatility
@@ -72,11 +72,12 @@ src/
 **Layout:** Fixed header, then a resizable flex row — charts panel (left, default 50%, scrollable) + narrative panel (right, default 50%, sticky). A draggable 1px separator between them allows custom splits.
 
 **Data flow:**
-1. `App.jsx` calls `loadAllMarketData()` on mount — fires 4 parallel API calls
-2. Passes `{ dayAhead, generation, imbalance, afrr, errors }` to both panels
-3. Each chart section receives its slice + `errors` to show real vs mock badge
-4. ChartsPanel's Generate Summary button calls `aggregateWeeklySummary()` then `POST /api/narrative`
-5. Regulatory Watch and Customer Signals call their own endpoints independently
+1. `App.jsx` calls `loadSourceData()` independently for each of the 4 sources — no blocking `Promise.all`
+2. `dataLoading` state (`{ dayAhead, generation, imbalance, afrr }`) is tracked per source and passed down
+3. Each chart section renders immediately with a skeleton, flipping to live data as its source resolves
+4. `loadAllMarketData()` is still used by the compare-period feature (needs all 4 sources together)
+5. ChartsPanel's Generate Summary button calls `buildNarrativePayload()` then `POST /api/narrative`
+6. Regulatory Watch and Customer Signals call their own endpoints independently
 
 **Compare previous period:**
 - Checkbox in the date range toolbar ("Compare previous period")
@@ -128,13 +129,20 @@ All non-API `GET` routes serve `dist/index.html` (client-side routing support).
 
 ---
 
-## Research Cache (`server/researchCache.js`)
+## Caching (`server/researchCache.js`)
 
-Monthly Redis cache shared across all users and deploys:
-- **Key format:** `eml:{namespace}:{YYYY-MM}:{fingerprint}` — auto-expires at end of month via Redis TTL
-- **Fingerprint:** JSON of `{ urls, days, prompt }` (regulatory) or `{ urls, companies, topics, days, prompt }` (customer signals) — different configs cache independently
-- **Fallback:** in-memory `Map` when `REDIS_URL` is not set (local dev)
+Single Redis cache (`getCached` / `setCached`) used for both market data and research calls. Falls back to in-memory `Map` when `REDIS_URL` is not set.
+
+**Market data routes** (`/api/day-ahead-prices`, `/api/actual-generation`):
+- **Key:** `eml:market:{source}:{YYYY-MM}:{startDate|endDate}`
+- **TTL:** 24h for historical ranges (endDate before today — data never changes); 1h for ranges including today
+- **Imbalance + aFRR:** not cached yet — always error; TODO comments in `server/index.js` have the one-liner to enable once TenneT is live
+
+**Research calls** (Regulatory Watch, Customer Signals):
+- **Key:** `eml:{namespace}:{YYYY-MM}:{fingerprint}` — auto-expires at end of month
+- **Fingerprint:** `{ urls, days, prompt }` (regulatory) or `{ urls, companies, topics, days, prompt }` (customer signals)
 - **Effect:** one Sonnet call per month per unique config, regardless of how many users hit Refresh
+- Shows "📦 Cached · Updated [date]" in the UI when serving from Redis
 
 ---
 
@@ -178,13 +186,18 @@ All time-series charts support drag-to-zoom via `useZoom.js`:
 
 ---
 
-## Empty States (TenneT-pending charts)
+## Loading & Empty States
 
-Charts that require a pending TenneT token show an empty state instead of mock or blank data:
-- Hourglass icon + "Coming soon" heading + "Pending authorisation from TenneT" subtext
+**Skeleton loading** (`isLoading` prop on `ChartWrap`):
+- While a source is fetching, charts show an animated pulsing bar skeleton instead of blank space
+- `App.jsx` tracks `dataLoading` per source; passed through `ChartsPanel` → each section → `ChartWrap`
+- Once data resolves, the skeleton is replaced by the live chart with no full-page flash
+
+**TenneT-pending empty state** (`isMock` prop on `ChartWrap`):
+- Charts that require a pending TenneT token show: hourglass icon + "Coming soon" + "Pending authorisation from TenneT"
 - Source badge shows **"N/A"** (not the source name) when data is unavailable
-- Implemented via `isMock` prop on `ChartWrap` — replaces `children` entirely with the empty state div
 - Controls (resolution switcher, zoom reset) are hidden when `isMock` is true
+- Priority: `isLoading` renders skeleton first; once resolved, `isMock` shows empty state if the source errored
 
 ---
 
@@ -197,6 +210,8 @@ Charts that require a pending TenneT token show an empty state instead of mock o
 - `null` → "No data available"; `undefined` → block hidden (not yet generated)
 - Stale warning shown when date range changes after generation
 - 15-minute client-side session cache per `{ startDate, endDate }` pair
+- Payload built by `buildNarrativePayload()` — sends only what Claude needs: daily HLA, period stats, neg-hours per week, best arbitrage window. `hourlyHLAForNegativeDays` is computed client-side for arbitrage but excluded from the POST body to keep payload small
+- Express body limit set to `2mb` to support wide date ranges (e.g. full year)
 
 ### Regulatory Watch
 - **Gear icon** opens settings — 7 NL-focused default sources (ACM, TenneT, ENTSO-E, Netbeheer NL, RVO, EU Commission Energy, ACER), each toggleable
@@ -256,12 +271,12 @@ ENTSO-E A73/A85 returns error code 999 ("no matching data") for NL — this is e
 
 **Source badges on every chart**: Each chart shows the data source. When data is unavailable, the badge shows "N/A" — never the source name, since no data is actually being sourced.
 
-**Errors propagate to Claude**: `aggregateWeeklySummary()` passes the `errors` object. Claude is instructed not to fabricate values for unavailable sources — returning `null` for those sections instead.
+**Errors propagate to Claude**: `buildNarrativePayload()` passes the `errors` object. Claude is instructed not to fabricate values for unavailable sources — returning `null` for those sections instead.
 
 **Lazy Anthropic client**: SDK client created on first use so a missing API key doesn't crash the server on startup.
 
 **Single-container deployment**: Vite builds to `dist/`, Express serves it as static files. Same process, same port, no Nginx. Vite dev proxy is conditional — disabled in production since frontend and backend share the same origin.
 
-**Shared Redis cache**: Research results cached in Redis keyed by month + config fingerprint. All users share the same cache, so a team of 10 pays for one Sonnet call per month, not ten.
+**Shared Redis cache**: Both market data and research results use the same Redis store. Market data is keyed by source + date range with a 1h/24h TTL; research results are keyed by month + config fingerprint. All users share the same cache — a team of 10 pays for one ENTSO-E fetch and one Sonnet call per cache window, not ten.
 
 **Negative price fix**: ENTSO-E XML parser regex uses `[-\d.]+` (not `[\d.]+`) so negative prices are correctly captured. All CET bucketing uses `Europe/Amsterdam` locale formatters, not UTC, to correctly handle NL delivery days.
