@@ -17,7 +17,7 @@ No other data is available. Do not reference, imply, or infer anything beyond th
 
 WHAT TO WRITE
 Write two sentences, and optionally a third:
-1. Price level and trend — reference the period average and at least two daily averages from the HLA breakdown to describe the direction of movement.
+1. Price level and trend — state the period average, then reference exactly two daily averages from the HLA breakdown (the highest and the lowest) to describe the direction of movement. Do not compute or reference sub-period averages.
 2. Volatility and negative hours — state the intra-period range (high minus low) and the total negative price hours. If negative hours are zero, say so directly.
 3. Arbitrage opportunity — only include this sentence if the data shows a clear, specific price spread that an asset operator could have acted on. Where hourly HLA data is provided for negative-price days, use it to identify the specific hours of the opportunity (e.g. charge window vs discharge window). State the exact prices and hours, and the asset type the opportunity applies to. If no such opportunity is evident in the data, omit this sentence entirely. Do not manufacture one to fill space.
 
