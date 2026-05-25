@@ -214,9 +214,13 @@ All time-series charts support drag-to-zoom via `useZoom.js`:
 - Express body limit set to `2mb` to support wide date ranges (e.g. full year)
 
 ### Regulatory Watch
+- **Auto-loads on mount** — fetches immediately; cache hit is near-instant on repeat visits
 - **Gear icon** opens settings — 7 NL-focused default sources (ACM, TenneT, ENTSO-E, Netbeheer NL, RVO, EU Commission Energy, ACER), each toggleable
-- **Configurable lookback** — default 90 days, min 30, max 180 (same as Customer Signals)
 - **Add source** appends new entries
+- **Lookback** — 4 fixed options: 30d / 60d / 90d (default) / 180d, rendered as pill buttons
+- **Regenerate button** at the bottom of the settings panel — dim by default, highlights indigo when any setting has changed (`dirty` flag); closes panel and fires a new fetch on click
+- **Header button** only appears during fetch (`Searching…`) or on error with no results (`Retry`)
+- `[LOOKBACK DAYS]` placeholder in the system prompt is substituted at call time alongside `[TODAY DATE]` and `[CUTOFF DATE]`
 - Calls **Claude Sonnet 4.6 + `web_search_20250305`** (up to 4 searches)
 - Response: JSON array of `{ change, implication, date, source }`
 - Server-side `parseJsonArray()` handles truncated responses by salvaging complete objects
@@ -224,9 +228,12 @@ All time-series charts support drag-to-zoom via `useZoom.js`:
 - Shows "📦 Cached · Updated [date]" when serving from Redis
 
 ### Customer Signals
+- **Auto-loads on mount** — same pattern as Regulatory Watch
 - **Gear icon** opens settings with 4 sections: Sources, Companies to Watch, Topics, Lookback Window
 - 8 default sources, 13 seeded companies, 8 seeded topics (NL energy market focused)
-- Lookback: default 90 days, min 30, max 180
+- **Lookback** — 4 fixed options: 30d / 60d / 90d (default) / 180d, pill buttons (same as Regulatory Watch)
+- **Regenerate button** at bottom of settings panel — dirty-state highlighting, same behaviour as Regulatory Watch
+- **Header button** same as Regulatory Watch: only `Searching…` or `Retry`
 - Calls **Claude Sonnet 4.6 + `web_search_20250305`** (up to 4 searches, max_tokens 6000)
 - Response: JSON array of `{ signal, context, implication, source }`
 - Shows "📦 Cached · Updated [date]" when serving from Redis
