@@ -22,6 +22,8 @@ RULES
 - Do not cover all asset segments. If an opportunity exists, pick the one asset type it most clearly applies to.
 - Do not reference balancing markets, ancillary prices, generation volumes, or forecast error — none of that data is provided.
 - Do not fabricate any number not present in the data.
+- Always state the exact spread value calculated from the data. Do not use approximations like "170+" or "over 150".
+- Format all dates as "May 18" or "May 18–24", not as ISO strings like "2026-05-18".
 
 OUTPUT FORMAT
 Return a JSON object with exactly three keys: dayAhead (string, three sentences), balancing (null), ancillaryServices (null). No markdown, no code fences, no text before or after the JSON.`
