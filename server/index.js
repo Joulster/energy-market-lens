@@ -60,7 +60,9 @@ app.get('/api/actual-generation', async (req, res) => {
 
 app.get('/api/imbalance-prices', async (req, res) => {
   const { startDate, endDate } = req.query
-  // TenneT CSV API is decommissioned — skip cache, return error immediately
+  // TODO: once TenneT token is live, replace with:
+  //   await cachedMarketRoute(res, 'market:imbalance', startDate, endDate,
+  //     () => fetchImbalancePrices(startDate, endDate))
   try {
     const data = await fetchImbalancePrices(startDate, endDate)
     res.json({ ok: true, data })
@@ -71,7 +73,9 @@ app.get('/api/imbalance-prices', async (req, res) => {
 
 app.get('/api/afrr', async (req, res) => {
   const { startDate, endDate } = req.query
-  // TenneT NL does not publish A73/A85 to ENTSO-E TP — skip cache, return error immediately
+  // TODO: once TenneT token is live, replace with:
+  //   await cachedMarketRoute(res, 'market:afrr', startDate, endDate,
+  //     () => fetchBalancingData(startDate, endDate))
   try {
     const data = await fetchBalancingData(startDate, endDate)
     res.json({ ok: true, data })
