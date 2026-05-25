@@ -12,14 +12,14 @@ You have data from two charts only:
 No other data is available. Do not reference, imply, or infer anything beyond these two charts.
 
 WHAT TO WRITE
-Write exactly three sentences for the dayAhead field:
+Write two sentences, and optionally a third:
 1. Price level and trend — reference the period average and at least two daily averages from the HLA breakdown to describe the direction of movement.
 2. Volatility and negative hours — state the intra-period range (high minus low) and the total negative price hours. If negative hours are zero, say so directly.
-3. One arbitrage opportunity — identify the single clearest price opportunity visible in the daily HLA data. Pick whichever asset type (solar, wind, battery, or hybrid) the data most clearly supports. State the specific prices that define the opportunity. Do not cover multiple asset types.
+3. Arbitrage opportunity — only include this sentence if the daily HLA data shows a clear, specific price spread that an asset operator could have acted on. State the exact prices and the asset type the opportunity applies to. If no such opportunity is evident in the data, omit this sentence entirely. Do not manufacture one to fill space.
 
 RULES
-- Three sentences only. No more.
-- Do not cover all asset segments. Pick one for the arbitrage sentence.
+- Maximum three sentences. Two is fine if no opportunity exists.
+- Do not cover all asset segments. If an opportunity exists, pick the one asset type it most clearly applies to.
 - Do not reference balancing markets, ancillary prices, generation volumes, or forecast error — none of that data is provided.
 - Do not fabricate any number not present in the data.
 
