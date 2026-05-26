@@ -7,7 +7,10 @@
     "server": "node server/index.js",
     "vite": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "eval:narrative": "node evals/runNarrativeEval.js",
+    "eval:regulatory": "node evals/runRegulatoryEval.js",
+    "eval:customer-signals": "node evals/runCustomerSignalsEval.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",
@@ -16,6 +19,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "ioredis": "^5.10.1",
+    "langsmith": "^0.7.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "recharts": "^2.12.7"

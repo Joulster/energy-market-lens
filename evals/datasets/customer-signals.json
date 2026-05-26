@@ -1,0 +1,59 @@
+[
+  {
+    "inputs": {
+      "sources": [
+        { "id": 1, "name": "Recharge News",       "url": "https://rechargenews.com",           "enabled": true },
+        { "id": 2, "name": "Energy Monitor",       "url": "https://energymonitor.ai",           "enabled": true },
+        { "id": 3, "name": "PV Tech",              "url": "https://pvtech.org",                 "enabled": true },
+        { "id": 4, "name": "Energy Storage News",  "url": "https://www.energy-storage.news",    "enabled": true }
+      ],
+      "companies": ["Statkraft", "Engie", "Axpo", "RWE", "Vattenfall", "Orsted"],
+      "topics": ["battery storage", "aFRR", "flexibility markets", "VPP software"],
+      "lookback": 90,
+      "systemPromptOverride": null
+    },
+    "expected": {
+      "isNonEmptyArray": true,
+      "requiredFields":  ["signal", "context", "implication", "source"],
+      "sourceNonEmpty":  true,
+      "noNullSources":   true
+    }
+  },
+  {
+    "inputs": {
+      "sources": [
+        { "id": 1, "name": "Recharge News",    "url": "https://rechargenews.com",        "enabled": true },
+        { "id": 5, "name": "Enlit Europe",     "url": "https://enlit.world",             "enabled": true },
+        { "id": 7, "name": "Energeia (NL)",    "url": "https://energeia.nl",             "enabled": true }
+      ],
+      "companies": ["Entrix", "Flower", "Sympower", "EDF", "E.ON"],
+      "topics": ["ancillary services", "grid flexibility", "demand response", "hybrid power plants"],
+      "lookback": 60,
+      "systemPromptOverride": null
+    },
+    "expected": {
+      "isNonEmptyArray": true,
+      "requiredFields":  ["signal", "context", "implication", "source"],
+      "sourceNonEmpty":  true,
+      "noNullSources":   true
+    }
+  },
+  {
+    "inputs": {
+      "sources": [
+        { "id": 1, "name": "Recharge News",       "url": "https://rechargenews.com",           "enabled": true },
+        { "id": 8, "name": "New Energy Coalition", "url": "https://www.newenergycoalition.org/news", "enabled": true }
+      ],
+      "companies": ["Alliander", "Elia", "Vattenfall", "RWE"],
+      "topics": ["battery storage", "flexibility markets", "aFRR"],
+      "lookback": 30,
+      "systemPromptOverride": null
+    },
+    "expected": {
+      "isNonEmptyArray": true,
+      "requiredFields":  ["signal", "context", "implication", "source"],
+      "sourceNonEmpty":  true,
+      "noNullSources":   true
+    }
+  }
+]

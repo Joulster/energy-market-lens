@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
+import { traceable } from 'langsmith/traceable'
 import { fetchDayAheadPrices, fetchActualGeneration, fetchBalancingData } from './entso-e.js'
 import { fetchImbalancePrices } from './tennet.js'
 import { generateNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
@@ -86,20 +87,55 @@ app.get('/api/afrr', async (req, res) => {
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
 
+// ── Traceable route handlers ──────────────────────────────────────────────────
+// Each handler is wrapped so LangSmith shows a parent "route" trace containing
+// the cache-hit decision. When fromCache is true, the child LLM span never fires
+// — the trace correctly records 0 tokens for that request.
+
+const _narrativeHandler = traceable(
+  async function narrativeRoute({ marketData, systemPrompt, startDate, endDate, forceRefresh }) {
+    const fingerprint = JSON.stringify({ startDate, endDate, prompt: systemPrompt ?? '' })
+    if (!forceRefresh) {
+      const hit = await getCached('narrative', fingerprint)
+      if (hit) return { narrative: hit.items, fromCache: true, cachedAt: hit.cachedAt }
+    }
+    const { result: narrative } = await generateNarrative(marketData, systemPrompt, startDate, endDate)
+    await setCached('narrative', fingerprint, narrative, NARRATIVE_TTL)
+    return { narrative, fromCache: false, cachedAt: new Date().toISOString() }
+  },
+  { name: 'narrativeRoute', run_type: 'chain', metadata: { service: 'energy-market-lens' } }
+)
+
+const _regulatoryHandler = traceable(
+  async function regulatoryRoute({ enabledSources, days, systemPrompt }) {
+    const fingerprint = JSON.stringify({ urls: enabledSources.map(s => s.url), days, prompt: systemPrompt ?? '' })
+    const hit = await getCached('regulatory', fingerprint)
+    if (hit) return { items: hit.items, fromCache: true, cachedAt: hit.cachedAt }
+    const { result: items } = await generateRegulatoryWatch(enabledSources, days, systemPrompt)
+    await setCached('regulatory', fingerprint, items)
+    return { items, fromCache: false, cachedAt: new Date().toISOString() }
+  },
+  { name: 'regulatoryRoute', run_type: 'chain', metadata: { service: 'energy-market-lens' } }
+)
+
+const _customerSignalsHandler = traceable(
+  async function customerSignalsRoute({ sources, companies, topics, days, systemPrompt }) {
+    const fingerprint = JSON.stringify({ urls: sources.map(s => s.url), companies, topics, days, prompt: systemPrompt ?? '' })
+    const hit = await getCached('customer-signals', fingerprint)
+    if (hit) return { items: hit.items, fromCache: true, cachedAt: hit.cachedAt }
+    const { result: items } = await generateCustomerSignals(sources, companies, topics, days, systemPrompt)
+    await setCached('customer-signals', fingerprint, items)
+    return { items, fromCache: false, cachedAt: new Date().toISOString() }
+  },
+  { name: 'customerSignalsRoute', run_type: 'chain', metadata: { service: 'energy-market-lens' } }
+)
+
 app.post('/api/narrative', async (req, res) => {
   try {
     const { marketData, systemPrompt, startDate, endDate, forceRefresh } = req.body
     if (!marketData) return res.status(400).json({ error: 'marketData required' })
-
-    const fingerprint = JSON.stringify({ startDate, endDate, prompt: systemPrompt ?? '' })
-    if (!forceRefresh) {
-      const hit = await getCached('narrative', fingerprint)
-      if (hit) return res.json({ ok: true, narrative: hit.items, fromCache: true, cachedAt: hit.cachedAt })
-    }
-
-    const narrative = await generateNarrative(marketData, systemPrompt, startDate, endDate)
-    await setCached('narrative', fingerprint, narrative, NARRATIVE_TTL)
-    res.json({ ok: true, narrative, fromCache: false, cachedAt: new Date().toISOString() })
+    const { narrative, fromCache, cachedAt } = await _narrativeHandler({ marketData, systemPrompt, startDate, endDate, forceRefresh })
+    res.json({ ok: true, narrative, fromCache, cachedAt })
   } catch (err) {
     console.error('narrative error:', err.message)
     res.json({ ok: false, error: err.message, narrative: null })
@@ -113,14 +149,8 @@ app.post('/api/regulatory', async (req, res) => {
     const enabledSources = sources.filter(s => s.enabled)
     if (enabledSources.length === 0) return res.status(400).json({ error: 'No enabled sources' })
     const days = Number.isInteger(lookback) ? lookback : 90
-
-    const fingerprint = JSON.stringify({ urls: enabledSources.map(s => s.url), days, prompt: systemPrompt ?? '' })
-    const hit = await getCached('regulatory', fingerprint)
-    if (hit) return res.json({ ok: true, items: hit.items, fromCache: true, cachedAt: hit.cachedAt })
-
-    const items = await generateRegulatoryWatch(enabledSources, days, systemPrompt)
-    await setCached('regulatory', fingerprint, items)
-    res.json({ ok: true, items, fromCache: false, cachedAt: new Date().toISOString() })
+    const { items, fromCache, cachedAt } = await _regulatoryHandler({ enabledSources, days, systemPrompt })
+    res.json({ ok: true, items, fromCache, cachedAt })
   } catch (err) {
     console.error('regulatory error:', err.message)
     res.json({ ok: false, error: err.message })
@@ -134,14 +164,8 @@ app.post('/api/customer-signals', async (req, res) => {
     if (!companies|| !Array.isArray(companies)|| companies.length=== 0) return res.status(400).json({ error: 'companies must be a non-empty array' })
     if (!topics   || !Array.isArray(topics)   || topics.length   === 0) return res.status(400).json({ error: 'topics must be a non-empty array'    })
     const days = Number.isInteger(lookback) ? lookback : 90
-
-    const fingerprint = JSON.stringify({ urls: sources.map(s => s.url), companies, topics, days, prompt: systemPrompt ?? '' })
-    const hit = await getCached('customer-signals', fingerprint)
-    if (hit) return res.json({ ok: true, items: hit.items, fromCache: true, cachedAt: hit.cachedAt })
-
-    const items = await generateCustomerSignals(sources, companies, topics, days, systemPrompt)
-    await setCached('customer-signals', fingerprint, items)
-    res.json({ ok: true, items, fromCache: false, cachedAt: new Date().toISOString() })
+    const { items, fromCache, cachedAt } = await _customerSignalsHandler({ sources, companies, topics, days, systemPrompt })
+    res.json({ ok: true, items, fromCache, cachedAt })
   } catch (err) {
     console.error('customer-signals error:', err.message)
     res.json({ ok: false, error: err.message })

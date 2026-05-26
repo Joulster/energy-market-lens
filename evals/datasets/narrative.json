@@ -1,0 +1,114 @@
+[
+  {
+    "inputs": {
+      "marketData": {
+        "period": { "from": "2026-05-01", "to": "2026-05-07" },
+        "dayAheadPrice": {
+          "avgEurMwh": 52.3,
+          "highEurMwh": 145.2,
+          "lowEurMwh": -12.4,
+          "rangeEurMwh": 157.6,
+          "negativeHours": 8,
+          "dailyHLA": [
+            { "date": "2026-05-01", "avg": 48.1, "high": 120.3, "low": -5.2, "negativeHours": 2 },
+            { "date": "2026-05-02", "avg": 55.4, "high": 145.2, "low": 10.1, "negativeHours": 0 },
+            { "date": "2026-05-03", "avg": 60.2, "high": 130.0, "low": 12.3, "negativeHours": 0 },
+            { "date": "2026-05-04", "avg": 44.8, "high": 95.0,  "low": -12.4, "negativeHours": 6 },
+            { "date": "2026-05-05", "avg": 50.1, "high": 110.5, "low": 5.0,  "negativeHours": 0 },
+            { "date": "2026-05-06", "avg": 51.3, "high": 98.0,  "low": 8.2,  "negativeHours": 0 },
+            { "date": "2026-05-07", "avg": 56.5, "high": 125.0, "low": 11.0, "negativeHours": 0 }
+          ],
+          "bestArbitrageWindow": {
+            "date": "2026-05-04",
+            "chargeWindow":    { "startHour": 11, "endHour": 14, "avgPrice": -8.3 },
+            "dischargeWindow": { "startHour": 18, "endHour": 21, "avgPrice": 95.2 },
+            "spread": 103.5
+          }
+        },
+        "negativeHoursPerWeek": [
+          { "week": "W18", "count": 8 }
+        ]
+      },
+      "systemPromptOverride": null,
+      "startDate": "2026-05-01",
+      "endDate": "2026-05-07"
+    },
+    "expected": {
+      "hasAllKeys":          ["dayAhead", "balancing", "ancillaryServices"],
+      "balancingIsNull":     true,
+      "ancillaryIsNull":     true,
+      "dayAheadIsString":    true,
+      "noMarkdownFences":    true
+    }
+  },
+  {
+    "inputs": {
+      "marketData": {
+        "period": { "from": "2026-04-01", "to": "2026-04-30" },
+        "dayAheadPrice": {
+          "avgEurMwh": 35.7,
+          "highEurMwh": 200.0,
+          "lowEurMwh": -45.0,
+          "rangeEurMwh": 245.0,
+          "negativeHours": 42,
+          "dailyHLA": [
+            { "date": "2026-04-01", "avg": 40.2, "high": 180.0, "low": -10.0, "negativeHours": 3 },
+            { "date": "2026-04-02", "avg": 38.5, "high": 165.0, "low": -20.0, "negativeHours": 5 },
+            { "date": "2026-04-03", "avg": 30.1, "high": 200.0, "low": -45.0, "negativeHours": 10 },
+            { "date": "2026-04-04", "avg": 25.8, "high": 120.0, "low": -30.0, "negativeHours": 8 }
+          ],
+          "bestArbitrageWindow": null
+        },
+        "negativeHoursPerWeek": [
+          { "week": "W14", "count": 18 },
+          { "week": "W15", "count": 24 }
+        ]
+      },
+      "systemPromptOverride": null,
+      "startDate": "2026-04-01",
+      "endDate": "2026-04-30"
+    },
+    "expected": {
+      "hasAllKeys":          ["dayAhead", "balancing", "ancillaryServices"],
+      "balancingIsNull":     true,
+      "ancillaryIsNull":     true,
+      "dayAheadIsString":    true,
+      "noMarkdownFences":    true,
+      "noArbitrageSentence": true
+    }
+  },
+  {
+    "inputs": {
+      "marketData": {
+        "period": { "from": "2026-03-01", "to": "2026-03-07" },
+        "dayAheadPrice": {
+          "avgEurMwh": 95.4,
+          "highEurMwh": 310.0,
+          "lowEurMwh": 15.0,
+          "rangeEurMwh": 295.0,
+          "negativeHours": 0,
+          "dailyHLA": [
+            { "date": "2026-03-01", "avg": 88.0, "high": 200.0, "low": 30.0, "negativeHours": 0 },
+            { "date": "2026-03-02", "avg": 110.5, "high": 310.0, "low": 15.0, "negativeHours": 0 },
+            { "date": "2026-03-03", "avg": 90.2,  "high": 250.0, "low": 20.0, "negativeHours": 0 }
+          ],
+          "bestArbitrageWindow": null
+        },
+        "negativeHoursPerWeek": [
+          { "week": "W9", "count": 0 }
+        ]
+      },
+      "systemPromptOverride": null,
+      "startDate": "2026-03-01",
+      "endDate": "2026-03-07"
+    },
+    "expected": {
+      "hasAllKeys":       ["dayAhead", "balancing", "ancillaryServices"],
+      "balancingIsNull":  true,
+      "ancillaryIsNull":  true,
+      "dayAheadIsString": true,
+      "noMarkdownFences": true,
+      "zeroNegHours":     true
+    }
+  }
+]

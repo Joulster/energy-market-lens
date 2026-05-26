@@ -6,6 +6,15 @@
 //   [COMPANY LIST] → comma-separated company names  (customer signals only)
 //   [TOPIC LIST]   → comma-separated topic strings  (customer signals only)
 
+// Bump a version string when you change a prompt.
+// Attach these to every LangSmith trace so runs are filterable by prompt_version.
+// Git commit history is the full audit trail — no external prompt registry needed.
+export const PROMPT_VERSIONS = {
+  narrative:       'v1',
+  regulatory:      'v1',
+  customerSignals: 'v1',
+}
+
 export const NARRATIVE_PROMPT = `You are summarising NL day-ahead electricity market data for a product team at a VPP software company. Be direct. No filler phrases. Every sentence must reference a specific number from the data provided.
 
 DATA AVAILABLE

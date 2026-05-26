@@ -1,0 +1,54 @@
+[
+  {
+    "inputs": {
+      "enabledSources": [
+        { "id": 1, "name": "ACM (Dutch energy regulator)",    "url": "https://www.acm.nl/nl/onderwerpen/energie",        "enabled": true },
+        { "id": 2, "name": "TenneT Newsroom",                 "url": "https://www.tennet.eu/news/",                      "enabled": true },
+        { "id": 3, "name": "ENTSO-E News",                    "url": "https://www.entsoe.eu/news/",                      "enabled": true },
+        { "id": 6, "name": "EU Commission Energy",            "url": "https://energy.ec.europa.eu/news_en",              "enabled": true }
+      ],
+      "lookback": 90,
+      "systemPromptOverride": null
+    },
+    "expected": {
+      "isNonEmptyArray":        true,
+      "requiredFields":         ["change", "implication", "date", "source"],
+      "dateIsISOOrNull":        true,
+      "sourceContainsUrl":      true,
+      "noHallucinatedDomains":  true
+    }
+  },
+  {
+    "inputs": {
+      "enabledSources": [
+        { "id": 1, "name": "ACM (Dutch energy regulator)", "url": "https://www.acm.nl/nl/onderwerpen/energie", "enabled": true },
+        { "id": 7, "name": "ACER",                         "url": "https://www.acer.europa.eu/news-and-events/news", "enabled": true }
+      ],
+      "lookback": 30,
+      "systemPromptOverride": null
+    },
+    "expected": {
+      "isNonEmptyArray":   true,
+      "requiredFields":    ["change", "implication", "date", "source"],
+      "dateIsISOOrNull":   true,
+      "sourceContainsUrl": true
+    }
+  },
+  {
+    "inputs": {
+      "enabledSources": [
+        { "id": 4, "name": "Netbeheer Nederland", "url": "https://www.netbeheernederland.nl/nieuws",   "enabled": true },
+        { "id": 6, "name": "EU Commission Energy", "url": "https://energy.ec.europa.eu/news_en",       "enabled": true },
+        { "id": 7, "name": "ACER",                 "url": "https://www.acer.europa.eu/news-and-events/news", "enabled": true }
+      ],
+      "lookback": 180,
+      "systemPromptOverride": null
+    },
+    "expected": {
+      "isNonEmptyArray":   true,
+      "requiredFields":    ["change", "implication", "date", "source"],
+      "dateIsISOOrNull":   true,
+      "sourceContainsUrl": true
+    }
+  }
+]
