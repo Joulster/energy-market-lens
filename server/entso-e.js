@@ -22,7 +22,15 @@ function toEntsoeDate(isoStr, addDays = 0) {
   return entsoeDate(d)
 }
 
-async function entsoeRequest(params) {
+const ENTSOE_TIMEOUT_MS = 30_000          // 30 s — ENTSO-E is slow but usually responds
+const ENTSOE_MAX_RETRIES = 3              // total attempts (1 original + 2 retries)
+const ENTSOE_RETRY_BASE_MS = 1_000       // 1 s → 2 s → 4 s (exponential backoff)
+
+// Status codes worth retrying (transient). 4xx errors (except 429) are config
+// problems — no point retrying those.
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
+
+async function entsoeRequest(params, attempt = 1) {
   const key = process.env.ENTSOE_API_KEY
   if (!key) throw new Error('ENTSOE_API_KEY not configured')
 
@@ -30,14 +38,51 @@ async function entsoeRequest(params) {
   url.searchParams.set('securityToken', key)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
 
-  const res = await fetch(url.toString())
+  // Safe URL for logging — strip the API key
+  const safeUrl = (() => {
+    const u = new URL(url.toString())
+    u.searchParams.set('securityToken', '***')
+    return u.toString()
+  })()
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ENTSOE_TIMEOUT_MS)
+
+  let res
+  try {
+    res = await fetch(url.toString(), { signal: controller.signal })
+  } catch (err) {
+    clearTimeout(timer)
+    const isTimeout = err.name === 'AbortError'
+    const msg = isTimeout
+      ? `ENTSO-E request timed out after ${ENTSOE_TIMEOUT_MS / 1000}s`
+      : `ENTSO-E network error: ${err.message}`
+    if (attempt < ENTSOE_MAX_RETRIES) {
+      const delay = ENTSOE_RETRY_BASE_MS * 2 ** (attempt - 1)
+      console.warn(`  ↺ ${msg} — retrying in ${delay}ms (attempt ${attempt}/${ENTSOE_MAX_RETRIES}) [${safeUrl}]`)
+      await new Promise(r => setTimeout(r, delay))
+      return entsoeRequest(params, attempt + 1)
+    }
+    throw new Error(`${msg} (all ${ENTSOE_MAX_RETRIES} attempts exhausted)`)
+  } finally {
+    clearTimeout(timer)
+  }
+
   if (!res.ok) {
     const body = await res.text().catch(() => '')
     const reason = body.match(/<Text>([\s\S]*?)<\/Text>/)?.[1]?.trim()
       ?? body.match(/<code>([\s\S]*?)<\/code>/)?.[1]?.trim()
       ?? `status ${res.status}`
-    throw new Error(`ENTSO-E ${res.status}: ${reason}`)
+    const err = new Error(`ENTSO-E ${res.status}: ${reason}`)
+    if (RETRYABLE_STATUSES.has(res.status) && attempt < ENTSOE_MAX_RETRIES) {
+      const delay = ENTSOE_RETRY_BASE_MS * 2 ** (attempt - 1)
+      console.warn(`  ↺ ${err.message} — retrying in ${delay}ms (attempt ${attempt}/${ENTSOE_MAX_RETRIES})`)
+      await new Promise(r => setTimeout(r, delay))
+      return entsoeRequest(params, attempt + 1)
+    }
+    throw err
   }
+
   return res.text()
 }
 
