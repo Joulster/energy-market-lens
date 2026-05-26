@@ -301,7 +301,7 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
     <section className="asset-section">
       <h2 className="section-title">Day-Ahead</h2>
 
-      <ChartWrap title="Day-Ahead Price NL (EUR/MWh)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} controls={resolutionControls} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
+      <ChartWrap title="Day-Ahead Price NL (EUR/MWh)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} error={errors?.dayAhead} controls={resolutionControls} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={220}>
           {isCandlestick ? (
             <ComposedChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} barCategoryGap="1%" style={{ cursor: 'crosshair', userSelect: 'none' }}>
@@ -335,7 +335,7 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="Negative Price Hours per Week NL" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
+      <ChartWrap title="Negative Price Hours per Week NL" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} error={errors?.dayAhead} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />

@@ -62,7 +62,7 @@ export function CompareTooltip({ active, payload, label }) {
   )
 }
 
-export function ChartWrap({ children, title, source, isMock, isLoading, controls, zoomed, onReset }) {
+export function ChartWrap({ children, title, source, isMock, isLoading, error, controls, zoomed, onReset }) {
   return (
     <div className="chart-wrap">
       <div className="chart-header">
@@ -85,6 +85,12 @@ export function ChartWrap({ children, title, source, isMock, isLoading, controls
           <div className="chart-skeleton-bar" style={{ height: '75%' }} />
           <div className="chart-skeleton-bar" style={{ height: '35%' }} />
           <div className="chart-skeleton-bar" style={{ height: '65%' }} />
+        </div>
+      ) : error ? (
+        <div className="chart-empty-state">
+          <span className="chart-empty-icon">⚠</span>
+          <p className="chart-empty-title">Data unavailable</p>
+          <p className="chart-empty-sub chart-empty-error">{error}</p>
         </div>
       ) : isMock ? (
         <div className="chart-empty-state">

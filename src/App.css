@@ -358,6 +358,12 @@ body {
   color: #475569;
 }
 
+.chart-empty-error {
+  color: #f87171;
+  max-width: 260px;
+  text-align: center;
+}
+
 /* ── Hourly heatmap shape ─────────────────────────────────────────────────── */
 .hourly-shape {
   display: flex;
