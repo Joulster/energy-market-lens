@@ -85,14 +85,16 @@ async function tennetRequest(endpoint, dateFrom, dateTo, attempt = 1) {
   return res.json()
 }
 
-// Parse TenneT settlement-prices JSON into flat array of 15-min interval objects
+// Parse TenneT settlement-prices JSON into flat array of 15-min interval objects.
+// timeInterval_start is a CET local datetime string (e.g. "2026-01-01T00:00:00").
 function parseSettlementPoints(data) {
   const points = []
   for (const ts of data?.Response?.TimeSeries ?? []) {
     for (const pt of ts?.Period?.Points ?? []) {
       if (!pt.timeInterval_start) continue
       points.push({
-        date:         pt.timeInterval_start.slice(0, 10),  // YYYY-MM-DD
+        timestamp:    pt.timeInterval_start,               // full CET datetime
+        date:         pt.timeInterval_start.slice(0, 10),  // YYYY-MM-DD (for imbalance daily)
         dispatchUp:   parseFloat(pt.dispatch_up   ?? 0),
         dispatchDown: parseFloat(pt.dispatch_down ?? 0),
       })
@@ -143,27 +145,14 @@ export async function fetchImbalancePrices(startDate, endDate) {
 }
 
 // aFRR energy prices from TenneT settlement-prices (dispatch_up / dispatch_down).
-// Capacity prices (afrrCapacityPrice, fcrPrice) come from ENTSO-E A84 and are
-// merged in by the /api/afrr route handler.
+// Returns raw 15-min points so the frontend can aggregate to 15m / 1h / 1d.
+// Capacity prices come from ENTSO-E A81 and are returned separately by the route.
 export async function fetchAFRRData(startDate, endDate) {
   const points = await fetchSettlementPrices(startDate, endDate)
-
-  const byDay = {}
-  for (const { date, dispatchUp, dispatchDown } of points) {
-    if (!byDay[date]) byDay[date] = { up: [], down: [] }
-    byDay[date].up.push(dispatchUp)
-    byDay[date].down.push(dispatchDown)
-  }
-
-  const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null
-
-  const daily = Object.entries(byDay)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, { up, down }]) => ({
-      date,
-      afrrUpEnergyPrice:   avg(up),
-      afrrDownEnergyPrice: avg(down),
-    }))
-
-  return { daily }
+  const rawPoints = points.map(({ timestamp, dispatchUp, dispatchDown }) => ({
+    timestamp,
+    afrrUpEnergyPrice:   dispatchUp,
+    afrrDownEnergyPrice: dispatchDown,
+  }))
+  return { rawPoints }
 }

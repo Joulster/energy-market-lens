@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   LineChart, Line, ReferenceArea,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -5,6 +6,77 @@ import {
 } from 'recharts'
 import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip } from './shared.jsx'
 import { useZoom } from './useZoom.js'
+
+// ── Timestamp formatters ────────────────────────────────────────────────────
+
+// TenneT timestamps are CET local strings: "2026-01-01T00:00:00"
+// Slice directly — no timezone conversion needed.
+function fmtEnergyTs(v, resolution) {
+  if (!v) return ''
+  if (resolution === '1d') return fmtDate(v.slice(0, 10))
+  const date = v.slice(0, 10)
+  const time = v.slice(11, 16)   // "HH:MM"
+  return `${fmtDate(date)} ${time}`
+}
+
+// ENTSO-E capacity timestamps are CET: "2026-01-01T00:00"
+function fmtCapacityTs(v) {
+  if (!v) return ''
+  const [date, time] = v.split('T')
+  return `${fmtDate(date)} ${time}`
+}
+
+// ── aFRR energy aggregation ─────────────────────────────────────────────────
+
+const ENERGY_RESOLUTIONS = [
+  { key: '15m', label: '15m' },
+  { key: '1h',  label: '1h'  },
+  { key: '1d',  label: '1d'  },
+]
+
+const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null
+
+function aggregateEnergy1h(points) {
+  const buckets = {}
+  for (const pt of points) {
+    const key = pt.timestamp.slice(0, 13)  // "YYYY-MM-DDTHH"
+    if (!buckets[key]) buckets[key] = { timestamp: pt.timestamp, up: [], down: [] }
+    buckets[key].up.push(pt.afrrUpEnergyPrice)
+    buckets[key].down.push(pt.afrrDownEnergyPrice)
+  }
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([, { timestamp, up, down }]) => ({
+      timestamp,
+      afrrUpEnergyPrice:   avg(up),
+      afrrDownEnergyPrice: avg(down),
+    }))
+}
+
+function aggregateEnergy1d(points) {
+  const buckets = {}
+  for (const pt of points) {
+    const date = pt.timestamp.slice(0, 10)
+    if (!buckets[date]) buckets[date] = { up: [], down: [] }
+    buckets[date].up.push(pt.afrrUpEnergyPrice)
+    buckets[date].down.push(pt.afrrDownEnergyPrice)
+  }
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, { up, down }]) => ({
+      timestamp: date,
+      afrrUpEnergyPrice:   avg(up),
+      afrrDownEnergyPrice: avg(down),
+    }))
+}
+
+function aggregateEnergy(points, resolution) {
+  if (resolution === '1h') return aggregateEnergy1h(points)
+  if (resolution === '1d') return aggregateEnergy1d(points)
+  return points  // 15m — raw
+}
+
+// ── AI Summary block ────────────────────────────────────────────────────────
 
 function fmtRangeDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
@@ -50,41 +122,62 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, last
   )
 }
 
+// ── Section ─────────────────────────────────────────────────────────────────
+
 export default function AncillaryServicesSection({ afrr, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, lastGenerated, dataLoading, compareEnabled, compareData, compareDates }) {
-  const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
-  const inPrevRange = d => (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate)
+  const [energyRes, setEnergyRes] = useState('1h')
 
-  const inRangeTs  = ts => { const date = ts?.slice(0, 10); return (!startDate || date >= startDate) && (!endDate || date <= endDate) }
-  const inPrevTs   = ts => { const date = ts?.slice(0, 10); return (!compareDates?.startDate || date >= compareDates.startDate) && (!compareDates?.endDate || date <= compareDates.endDate) }
+  const inRangeTs  = ts => { const d = ts?.slice(0, 10); return (!startDate || d >= startDate) && (!endDate || d <= endDate) }
+  const inPrevTs   = ts => { const d = ts?.slice(0, 10); return (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate) }
 
-  const afrrCapacity = (afrr?.afrrHourly ?? []).filter(d => inRangeTs(d.timestamp))
-  const afrrEnergy   = (afrr?.daily      ?? []).filter(d => inRange(d.date))
-  const fcrHourly    = (afrr?.fcrHourly  ?? []).filter(d => inRangeTs(d.timestamp))
-  const isMock = !!errors?.afrr
-
-  const prevAfrrCapacity = compareEnabled ? (compareData?.afrr?.afrrHourly ?? []).filter(d => inPrevTs(d.timestamp))  : []
-  const prevAfrrEnergy   = compareEnabled ? (compareData?.afrr?.daily      ?? []).filter(d => inPrevRange(d.date))    : []
-
+  // ── Capacity (ENTSO-E 4-h blocks) ─────────────────────────────────────────
+  const afrrCapacity     = (afrr?.afrrHourly     ?? []).filter(d => inRangeTs(d.timestamp))
+  const prevAfrrCapacity = compareEnabled ? (compareData?.afrr?.afrrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
   const mergedAfrrCapacity = afrrCapacity.map((d, i) => ({
     ...d,
     prevAfrrCapacityUpPrice:   prevAfrrCapacity[i]?.afrrCapacityUpPrice,
     prevAfrrCapacityDownPrice: prevAfrrCapacity[i]?.afrrCapacityDownPrice,
   }))
-  const mergedAfrr = afrrEnergy.map((d, i) => ({
-    ...d,
-    prevAfrrUpEnergyPrice:   prevAfrrEnergy[i]?.afrrUpEnergyPrice,
-    prevAfrrDownEnergyPrice: prevAfrrEnergy[i]?.afrrDownEnergyPrice,
-  }))
 
+  // ── FCR (ENTSO-E 4-h blocks) ───────────────────────────────────────────────
+  const fcrHourly     = (afrr?.fcrHourly  ?? []).filter(d => inRangeTs(d.timestamp))
   const prevFcrHourly = compareEnabled ? (compareData?.afrr?.fcrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
   const mergedFcr = fcrHourly.map((d, i) => ({
     ...d,
     prevPrice: prevFcrHourly[i]?.price ?? null,
   }))
 
+  // ── Energy (TenneT 15-min, aggregated by selected resolution) ─────────────
+  const rawEnergy     = (afrr?.afrrEnergyRaw     ?? []).filter(d => inRangeTs(d.timestamp))
+  const prevRawEnergy = compareEnabled ? (compareData?.afrr?.afrrEnergyRaw ?? []).filter(d => inPrevTs(d.timestamp)) : []
+
+  const energyData     = aggregateEnergy(rawEnergy,     energyRes)
+  const prevEnergyData = aggregateEnergy(prevRawEnergy, energyRes)
+  const mergedEnergy   = energyData.map((d, i) => ({
+    ...d,
+    prevAfrrUpEnergyPrice:   prevEnergyData[i]?.afrrUpEnergyPrice,
+    prevAfrrDownEnergyPrice: prevEnergyData[i]?.afrrDownEnergyPrice,
+  }))
+
+  const isMock = !!errors?.afrr
+
   const zoom0 = useZoom(mergedAfrrCapacity, 'timestamp')
   const zoom1 = useZoom(mergedFcr,          'timestamp')
-  const zoom2 = useZoom(mergedAfrr,         'date')
+  const zoom2 = useZoom(mergedEnergy,       'timestamp')
+
+  const energyResControls = (
+    <div className="range-selector chart-resolution-selector">
+      {ENERGY_RESOLUTIONS.map(r => (
+        <button
+          key={r.key}
+          className={`range-option${energyRes === r.key ? ' active' : ''}`}
+          onClick={() => { setEnergyRes(r.key); zoom2.reset() }}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  )
 
   return (
     <section className="asset-section">
@@ -94,14 +187,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp"
-              tickFormatter={v => {
-                if (!v) return ''
-                const [date, time] = v.split('T')
-                return `${fmtDate(date)} ${time}`
-              }}
-              tick={{ fill: '#94a3b8', fontSize: 10 }}
-            />
+            <XAxis dataKey="timestamp" tickFormatter={fmtCapacityTs} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
@@ -120,14 +206,7 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp"
-              tickFormatter={v => {
-                if (!v) return ''
-                const [date, time] = v.split('T')
-                return `${fmtDate(date)} ${time}`
-              }}
-              tick={{ fill: '#94a3b8', fontSize: 10 }}
-            />
+            <XAxis dataKey="timestamp" tickFormatter={fmtCapacityTs} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
@@ -140,18 +219,18 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="aFRR Energy Price NL — Up / Down (EUR/MWh)" source="TenneT" isMock={isMock} isLoading={dataLoading} zoomed={zoom2.isZoomed} onReset={zoom2.reset}>
+      <ChartWrap title="aFRR Energy Price NL — Up / Down (EUR/MWh)" source="TenneT" isMock={isMock} isLoading={dataLoading} controls={energyResControls} zoomed={zoom2.isZoomed} onReset={zoom2.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom2.displayData} {...chartProps} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtEnergyTs(v, energyRes)} tick={{ fill: '#94a3b8', fontSize: energyRes === '1d' ? 11 : 10 }} minTickGap={60} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
-            <Tooltip content={<CompareTooltip />} />
+            <Tooltip content={<CompareTooltip labelFormatter={v => fmtEnergyTs(v, energyRes)} />} />
             <Legend wrapperStyle={legendStyle} />
-            <Line type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)" />
-            <Line type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" />
-            {compareEnabled && <Line type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" />}
-            {compareEnabled && <Line type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" />}
+            <Line type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)" isAnimationActive={false} />
+            <Line type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" isAnimationActive={false} />
+            {compareEnabled && <Line type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" isAnimationActive={false} />}
+            {compareEnabled && <Line type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" isAnimationActive={false} />}
             {zoom2.refArea.left && zoom2.refArea.right && (
               <ReferenceArea x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}

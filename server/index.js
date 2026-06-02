@@ -78,11 +78,11 @@ app.get('/api/afrr', async (req, res) => {
       }),
     ])
     return {
-      daily:      tennet.daily,        // TenneT energy prices (afrrUpEnergyPrice / afrrDownEnergyPrice)
-      afrrHourly: entsoe.afrrHourly,   // ENTSO-E 4-h block capacity prices (Up + Down)
-      fcrHourly:  entsoe.fcrHourly,    // ENTSO-E 4-h block FCR clearing price (symmetric)
+      afrrEnergyRaw: tennet.rawPoints,    // TenneT 15-min energy prices (Up / Down)
+      afrrHourly:    entsoe.afrrHourly,   // ENTSO-E 4-h block capacity prices (Up + Down)
+      fcrHourly:     entsoe.fcrHourly,    // ENTSO-E 4-h block FCR clearing price (symmetric)
     }
-  }, 'v8|')
+  }, 'v9|')
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
