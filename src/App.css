@@ -99,6 +99,7 @@ body {
 .panel-resizer {
   position: relative;
   flex: 0 0 1px;
+  align-self: stretch;
   cursor: col-resize;
   background: #1e293b;
   transition: background 0.15s;
