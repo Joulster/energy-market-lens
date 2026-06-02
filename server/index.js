@@ -4,8 +4,8 @@ import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import { traceable } from 'langsmith/traceable'
-import { fetchDayAheadPrices, fetchActualGeneration, fetchBalancingData } from './entso-e.js'
-import { fetchImbalancePrices } from './tennet.js'
+import { fetchDayAheadPrices, fetchActualGeneration } from './entso-e.js'
+import { fetchImbalancePrices, fetchAFRRData } from './tennet.js'
 import { generateNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
 import { getCached, setCached } from './researchCache.js'
 
@@ -61,28 +61,14 @@ app.get('/api/actual-generation', async (req, res) => {
 
 app.get('/api/imbalance-prices', async (req, res) => {
   const { startDate, endDate } = req.query
-  // TODO: once TenneT token is live, replace with:
-  //   await cachedMarketRoute(res, 'market:imbalance', startDate, endDate,
-  //     () => fetchImbalancePrices(startDate, endDate))
-  try {
-    const data = await fetchImbalancePrices(startDate, endDate)
-    res.json({ ok: true, data })
-  } catch {
-    res.json({ ok: false, error: 'TenneT API unavailable — token pending', data: null })
-  }
+  await cachedMarketRoute(res, 'market:imbalance', startDate, endDate,
+    () => fetchImbalancePrices(startDate, endDate))
 })
 
 app.get('/api/afrr', async (req, res) => {
   const { startDate, endDate } = req.query
-  // TODO: once TenneT token is live, replace with:
-  //   await cachedMarketRoute(res, 'market:afrr', startDate, endDate,
-  //     () => fetchBalancingData(startDate, endDate))
-  try {
-    const data = await fetchBalancingData(startDate, endDate)
-    res.json({ ok: true, data })
-  } catch {
-    res.json({ ok: false, error: 'Balancing data unavailable — TenneT token pending', data: null })
-  }
+  await cachedMarketRoute(res, 'market:afrr', startDate, endDate,
+    () => fetchAFRRData(startDate, endDate))
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
