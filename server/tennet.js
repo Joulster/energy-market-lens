@@ -113,6 +113,74 @@ async function fetchSettlementPrices(startDate, endDate) {
   return all
 }
 
+// ── Merit-order-list (aFRR capacity price) ──────────────────────────────────
+
+// NL aFRR procurement target (MW). TenneT procures ~350-400 MW for NL;
+// 400 is used as the reference point to read the marginal capacity bid price.
+const AFRR_PROCUREMENT_MW = 400
+
+// Parse merit-order-list JSON into per-ISP objects.
+// Response wraps points the same way settlement-prices does.
+function parseMeritOrderPoints(data) {
+  const points = []
+  for (const ts of data?.Response?.TimeSeries ?? []) {
+    for (const pt of ts?.Period?.Points ?? []) {
+      if (!pt.timeInterval_start) continue
+      points.push({
+        date:       pt.timeInterval_start.slice(0, 10),  // YYYY-MM-DD
+        thresholds: Array.isArray(pt.Thresholds) ? pt.Thresholds : [],
+      })
+    }
+  }
+  return points
+}
+
+// For a single ISP's threshold list, return the price_up at the first
+// threshold where capacity_threshold >= targetMW.
+// Returns null if the stack is empty or no threshold reaches targetMW.
+function capacityPriceAtTarget(thresholds, targetMW) {
+  const sorted = [...thresholds]
+    .map(t => ({
+      mw:        parseFloat(t.capacity_threshold),
+      priceUp:   t.price_up   != null ? parseFloat(t.price_up)   : null,
+    }))
+    .filter(t => !isNaN(t.mw))
+    .sort((a, b) => a.mw - b.mw)
+
+  // Find the first entry that meets or exceeds the target
+  const hit = sorted.find(t => t.mw >= targetMW)
+  if (hit) return hit.priceUp
+
+  // If no entry reaches the target, use the highest available (partial procurement)
+  const last = sorted[sorted.length - 1]
+  return last?.priceUp ?? null
+}
+
+// Fetch merit-order-list across monthly chunks and return daily average capacity price.
+async function fetchMeritOrderPrices(startDate, endDate) {
+  const chunks = monthChunks(startDate, endDate)
+  const allPoints = []
+  for (const { from, to } of chunks) {
+    const data = await tennetRequest('merit-order-list', from, to)
+    allPoints.push(...parseMeritOrderPoints(data))
+  }
+
+  // Aggregate: daily average of per-ISP capacity prices
+  const byDay = {}
+  for (const { date, thresholds } of allPoints) {
+    const price = capacityPriceAtTarget(thresholds, AFRR_PROCUREMENT_MW)
+    if (price === null) continue
+    if (!byDay[date]) byDay[date] = []
+    byDay[date].push(price)
+  }
+
+  const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : null
+
+  return Object.fromEntries(
+    Object.entries(byDay).map(([date, prices]) => [date, avg(prices)])
+  )
+}
+
 // ── Public fetchers ─────────────────────────────────────────────────────────
 
 // Imbalance mid price — (dispatch_up + dispatch_down) / 2, aggregated to daily
@@ -142,10 +210,17 @@ export async function fetchImbalancePrices(startDate, endDate) {
   return { daily }
 }
 
-// aFRR energy prices from settlement-prices dispatch_up/down.
-// afrrCapacityPrice (merit-order-list) and fcrPrice have no dedicated endpoint yet.
+// aFRR energy prices from settlement-prices + capacity price from merit-order-list.
+// fcrPrice has no dedicated TenneT endpoint and remains null.
 export async function fetchAFRRData(startDate, endDate) {
-  const points = await fetchSettlementPrices(startDate, endDate)
+  // Fetch both data sources in parallel
+  const [points, capacityByDay] = await Promise.all([
+    fetchSettlementPrices(startDate, endDate),
+    fetchMeritOrderPrices(startDate, endDate).catch(err => {
+      console.warn('merit-order-list fetch failed, capacity price will be null:', err.message)
+      return {}
+    }),
+  ])
 
   const byDay = {}
   for (const { date, dispatchUp, dispatchDown } of points) {
@@ -160,7 +235,7 @@ export async function fetchAFRRData(startDate, endDate) {
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, { up, down }]) => ({
       date,
-      afrrCapacityPrice:   null,   // merit-order-list endpoint — not yet implemented
+      afrrCapacityPrice:   capacityByDay[date] ?? null,
       afrrUpEnergyPrice:   avg(up),
       afrrDownEnergyPrice: avg(down),
       fcrPrice:            null,   // no dedicated TenneT endpoint available
