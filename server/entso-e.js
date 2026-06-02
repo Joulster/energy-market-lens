@@ -143,12 +143,14 @@ async function entsoeRequestBinary(params, attempt = 1) {
   return Buffer.from(await res.arrayBuffer())
 }
 
-// Extract the first XML file from a ZIP buffer. Returns the XML string.
-function unzipXml(buffer) {
+// Extract all XML files from a ZIP buffer. Returns an array of XML strings.
+// ENTSO-E A81 returns one XML file per delivery period (one per day), so
+// a 7-day request produces a ZIP with 7+ files — we must parse them all.
+function unzipAllXml(buffer) {
   const zip = new AdmZip(buffer)
-  const entry = zip.getEntries().find(e => e.entryName.endsWith('.xml'))
-  if (!entry) throw new Error('No XML found in ENTSO-E ZIP response')
-  return entry.getData().toString('utf8')
+  const entries = zip.getEntries().filter(e => e.entryName.endsWith('.xml'))
+  if (!entries.length) throw new Error('No XML found in ENTSO-E ZIP response')
+  return entries.map(e => e.getData().toString('utf8'))
 }
 
 function parseXmlTimeSeries(xml) {
@@ -518,13 +520,16 @@ export async function fetchCapacityPrices(startDate, endDate) {
     'type_MarketAgreement.Type': 'A01',
   }
 
-  // Fetch all chunks for a given processType and collect raw points
+  // Fetch all chunks for a given processType and collect raw points.
+  // Each ZIP contains one XML file per delivery period — parse all of them.
   async function fetchAllChunks(processType, maxDays) {
     const allPoints = []
     for (const { ps, pe } of dateChunks(sd, ed, maxDays)) {
       try {
         const buf = await entsoeRequestBinary({ ...base, processType, periodStart: ps, periodEnd: pe })
-        allPoints.push(...parseCapacityTimeSeries(unzipXml(buf)))
+        for (const xml of unzipAllXml(buf)) {
+          allPoints.push(...parseCapacityTimeSeries(xml))
+        }
       } catch (e) {
         console.warn(`ENTSO-E A81 ${processType} chunk ${ps}–${pe} failed:`, e.message)
       }
