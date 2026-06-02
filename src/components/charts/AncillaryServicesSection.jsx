@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  LineChart, Line, ReferenceArea,
+  ComposedChart, LineChart, Line, Bar, ReferenceArea,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts'
@@ -185,37 +185,46 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
 
       <ChartWrap title="aFRR Capacity Price NL (EUR/MW/h)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
+          <ComposedChart data={zoom0.displayData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="timestamp" tickFormatter={fmtCapacityTs} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
+            {/* Capacity MW — outer left axis */}
+            <YAxis yAxisId="cap"   orientation="left" width={42} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}MW`} />
+            {/* Price EUR/MW/h — inner left axis */}
+            <YAxis yAxisId="price" orientation="left" width={45} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
-            <Line type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Capacity Up (EUR/MW/h)" />
-            <Line type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Capacity Down (EUR/MW/h)" />
-            {compareEnabled && <Line type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" />}
-            {compareEnabled && <Line type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" />}
+            <Bar yAxisId="cap" dataKey="afrrCapacityUpMW"   fill={COLORS.green} fillOpacity={0.18} name="Up Capacity (MW)"   isAnimationActive={false} />
+            <Bar yAxisId="cap" dataKey="afrrCapacityDownMW" fill={COLORS.amber} fillOpacity={0.18} name="Down Capacity (MW)" isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Up Price (EUR/MW/h)"   isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Down Price (EUR/MW/h)" isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up"   isAnimationActive={false} />}
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" isAnimationActive={false} />}
             {zoom0.refArea.left && zoom0.refArea.right && (
-              <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea yAxisId="price" x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </ChartWrap>
 
       <ChartWrap title="FCR Clearing Price NL (EUR/MW/h)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
-          <LineChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
+          <ComposedChart data={zoom1.displayData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
             <XAxis dataKey="timestamp" tickFormatter={fmtCapacityTs} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
+            {/* Capacity MW — outer left axis */}
+            <YAxis yAxisId="cap"   orientation="left" width={42} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}MW`} />
+            {/* Price EUR/MW/h — inner left axis */}
+            <YAxis yAxisId="price" orientation="left" width={45} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
-            <Line type="stepAfter" dataKey="price" stroke={COLORS.purple} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" />
-            {compareEnabled && <Line type="stepAfter" dataKey="prevPrice" stroke={COLORS.purple} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" />}
+            <Bar  yAxisId="cap"   dataKey="capacityMW" fill={COLORS.purple} fillOpacity={0.18} name="FCR Capacity (MW)"           isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={COLORS.purple} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevPrice" stroke={COLORS.purple} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" isAnimationActive={false} />}
             {zoom1.refArea.left && zoom1.refArea.right && (
-              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea yAxisId="price" x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
-          </LineChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </ChartWrap>
 

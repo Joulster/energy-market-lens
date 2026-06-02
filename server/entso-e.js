@@ -469,8 +469,14 @@ function parseCapacityTimeSeries(xml) {
         if (!posMatch) continue
         const valMatch = ptXml.match(/<procurement_Price\.amount>([\d.+-]+)<\/procurement_Price\.amount>/)
         if (!valMatch) continue
+        const qtyMatch = ptXml.match(/<quantity>([\d.+-]+)<\/quantity>/)
         const ts = new Date(startTs.getTime() + (parseInt(posMatch[1], 10) - 1) * intervalHours * 3600_000)
-        points.push({ ts, value: parseFloat(valMatch[1]), direction })
+        points.push({
+          ts,
+          value:    parseFloat(valMatch[1]),
+          quantity: qtyMatch ? parseFloat(qtyMatch[1]) : null,
+          direction,
+        })
       }
     }
   }
@@ -547,26 +553,28 @@ export async function fetchCapacityPrices(startDate, endDate) {
 
   // ── aFRR: 4-hour blocks, two directions (A01=up, A02=down) ──────────────
   const afrrBySlot = {}
-  for (const { ts, value, direction } of afrrPoints) {
+  for (const { ts, value, quantity, direction } of afrrPoints) {
     const timestamp = `${cetDate(ts)}T${String(cetHour(ts)).padStart(2, '0')}:00`
     if (!afrrBySlot[timestamp]) afrrBySlot[timestamp] = {}
-    if (direction === 'A01') afrrBySlot[timestamp].up   = value
-    if (direction === 'A02') afrrBySlot[timestamp].down = value
+    if (direction === 'A01') { afrrBySlot[timestamp].up = value;   afrrBySlot[timestamp].upMW   = quantity }
+    if (direction === 'A02') { afrrBySlot[timestamp].down = value; afrrBySlot[timestamp].downMW = quantity }
   }
   const afrrHourly = Object.entries(afrrBySlot)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([timestamp, { up = null, down = null }]) => ({
+    .map(([timestamp, { up = null, down = null, upMW = null, downMW = null }]) => ({
       timestamp,
       afrrCapacityUpPrice:   up,
       afrrCapacityDownPrice: down,
+      afrrCapacityUpMW:      upMW,
+      afrrCapacityDownMW:    downMW,
     }))
 
   // ── FCR: 4-hour blocks, symmetric (A03) ─────────────────────────────────
   const seen = new Set()
   const fcrHourly = []
-  for (const { ts, value } of fcrPoints) {
+  for (const { ts, value, quantity } of fcrPoints) {
     const key = `${cetDate(ts)}T${String(cetHour(ts)).padStart(2, '0')}:00`
-    if (!seen.has(key)) { fcrHourly.push({ timestamp: key, price: value }); seen.add(key) }
+    if (!seen.has(key)) { fcrHourly.push({ timestamp: key, price: value, capacityMW: quantity }); seen.add(key) }
   }
   fcrHourly.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 

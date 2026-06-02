@@ -82,7 +82,7 @@ app.get('/api/afrr', async (req, res) => {
       afrrHourly:    entsoe.afrrHourly,   // ENTSO-E 4-h block capacity prices (Up + Down)
       fcrHourly:     entsoe.fcrHourly,    // ENTSO-E 4-h block FCR clearing price (symmetric)
     }
-  }, 'v9|')
+  }, 'v10|')
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
