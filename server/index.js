@@ -77,15 +77,16 @@ app.get('/api/afrr', async (req, res) => {
         return { afrrCapacityByDay: {}, fcrByDay: {} }
       }),
     ])
-    const { afrrCapacityByDay, fcrByDay } = entsoe
+    const { afrrCapacityUp, afrrCapacityDown, fcrHourly } = entsoe
     return {
       daily: tennet.daily.map(d => ({
         ...d,
-        afrrCapacityPrice: afrrCapacityByDay[d.date] ?? null,
-        fcrPrice:          fcrByDay[d.date]          ?? null,
-      }))
+        afrrCapacityUpPrice:   afrrCapacityUp[d.date]   ?? null,
+        afrrCapacityDownPrice: afrrCapacityDown[d.date] ?? null,
+      })),
+      fcrHourly,
     }
-  }, 'v4|')
+  }, 'v5|')
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours

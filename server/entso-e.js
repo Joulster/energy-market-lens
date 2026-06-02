@@ -443,12 +443,48 @@ function dailyAvgFromPoints(points) {
   )
 }
 
+// Direction-aware parser for A81 capacity TimeSeries.
+// Each TimeSeries carries a flowDirection.direction (A01=up, A02=down, A03=symmetric).
+// Returns [{ts, value, direction}].
+function parseCapacityTimeSeries(xml) {
+  const points = []
+  for (const tsMatch of xml.matchAll(/<TimeSeries>([\s\S]*?)<\/TimeSeries>/g)) {
+    const tsXml = tsMatch[1]
+    const direction = tsXml.match(/<flowDirection\.direction>(A\d+)<\/flowDirection\.direction>/)?.[1] ?? null
+
+    for (const periodMatch of tsXml.matchAll(/<Period>([\s\S]*?)<\/Period>/g)) {
+      const periodXml = periodMatch[1]
+      const startMatch = periodXml.match(/<start>(.*?)<\/start>/)
+      if (!startMatch) continue
+
+      const startTs = new Date(startMatch[1].replace('T', ' ').replace('Z', '') + 'Z')
+      const resolution = periodXml.match(/<resolution>(.*?)<\/resolution>/)?.[1] ?? 'PT60M'
+      const intervalHours = resolution === 'PT60M' ? 1 : resolution === 'PT30M' ? 0.5 : resolution === 'PT15M' ? 0.25 : 1
+
+      for (const ptMatch of periodXml.matchAll(/<Point>([\s\S]*?)<\/Point>/g)) {
+        const ptXml = ptMatch[1]
+        const posMatch = ptXml.match(/<position>(\d+)<\/position>/)
+        if (!posMatch) continue
+        const valMatch = ptXml.match(/<procurement_Price\.amount>([\d.+-]+)<\/procurement_Price\.amount>/)
+        if (!valMatch) continue
+        const ts = new Date(startTs.getTime() + (parseInt(posMatch[1], 10) - 1) * intervalHours * 3600_000)
+        points.push({ ts, value: parseFloat(valMatch[1]), direction })
+      }
+    }
+  }
+  return points
+}
+
 // Fetch aFRR and FCR capacity procurement prices from ENTSO-E.
 // Document type A81 (Contracted reserves), businessType B95 (Procured capacity).
 // Process types: A51 = aFRR, A52 = FCR (per ENTSO-E balancing document mapping).
 // Agreement type A01 = Daily (D-1 procurement used by TenneT NL).
 // Response is a ZIP file containing XML — requires binary fetch + decompress.
-// Returns { afrrCapacityByDay, fcrByDay } — plain date→price maps.
+//
+// Returns:
+//   afrrCapacityUp   { [cetDate]: price }  — A01 (up-regulation)
+//   afrrCapacityDown { [cetDate]: price }  — A02 (down-regulation)
+//   fcrHourly        [{ timestamp, price }] — A03 symmetric, one entry per 4-h block (CET)
 export async function fetchCapacityPrices(startDate, endDate) {
   const ps = startDate ? toEntsoeDate(startDate) : periodStart()
   const pe = endDate   ? toEntsoeDate(endDate, 1) : periodEnd()
@@ -467,21 +503,42 @@ export async function fetchCapacityPrices(startDate, endDate) {
     entsoeRequestBinary({ ...base, processType: 'A52' }),
   ])
 
-  const extract = (res) => {
-    if (res.status === 'rejected') return {}
-    try {
-      return dailyAvgFromPoints(parseBalancingTimeSeries(unzipXml(res.value)))
-    } catch (e) {
-      console.warn('ENTSO-E capacity ZIP parse error:', e.message)
-      return {}
-    }
-  }
-
   if (afrrRes.status === 'rejected') console.warn('ENTSO-E aFRR capacity fetch failed:', afrrRes.reason?.message)
   if (fcrRes.status  === 'rejected') console.warn('ENTSO-E FCR capacity fetch failed:',  fcrRes.reason?.message)
 
-  return {
-    afrrCapacityByDay: extract(afrrRes),
-    fcrByDay:          extract(fcrRes),
+  // ── aFRR: one price per CET day, two directions ──────────────────────────
+  const afrrCapacityUp   = {}
+  const afrrCapacityDown = {}
+  if (afrrRes.status === 'fulfilled') {
+    try {
+      const points = parseCapacityTimeSeries(unzipXml(afrrRes.value))
+      for (const { ts, value, direction } of points) {
+        const date = cetDate(ts)
+        if (direction === 'A01') afrrCapacityUp[date]   = value   // up-regulation
+        if (direction === 'A02') afrrCapacityDown[date] = value   // down-regulation
+      }
+    } catch (e) { console.warn('ENTSO-E aFRR capacity parse error:', e.message) }
   }
+
+  // ── FCR: 4-hour blocks, symmetric (A03) ─────────────────────────────────
+  const fcrHourly = []
+  if (fcrRes.status === 'fulfilled') {
+    try {
+      const points = parseCapacityTimeSeries(unzipXml(fcrRes.value))
+      // Each 4-hour block has exactly one Point; bucket by CET hour to deduplicate
+      const seen = new Set()
+      for (const { ts, value } of points) {
+        const date = cetDate(ts)
+        const hour = cetHour(ts)
+        const key = `${date}T${String(hour).padStart(2, '0')}:00`
+        if (!seen.has(key)) {
+          fcrHourly.push({ timestamp: key, price: value })
+          seen.add(key)
+        }
+      }
+      fcrHourly.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    } catch (e) { console.warn('ENTSO-E FCR capacity parse error:', e.message) }
+  }
+
+  return { afrrCapacityUp, afrrCapacityDown, fcrHourly }
 }
