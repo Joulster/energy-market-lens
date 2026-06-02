@@ -73,7 +73,7 @@ src/
       shared.jsx                   # COLORS, ChartWrap, SourceBadge, fmtDate, chartProps, CompareTooltip, useLegendToggle
       useZoom.js                   # Reusable drag-to-zoom hook for all time-series charts
       DayAheadSection.jsx          # 2 charts: price (resolution switcher) + negative hours per week
-      BalancingSection.jsx         # 2 charts: imbalance midprice, weekly std dev volatility
+      BalancingSection.jsx         # 1 chart: imbalance midprice with 1h/1d resolution switcher
       AncillaryServicesSection.jsx # 3 charts: aFRR capacity (price+MW), FCR capacity (price+MW), aFRR energy up/down
 ```
 
@@ -145,7 +145,7 @@ All non-API `GET` routes serve `dist/index.html` (client-side routing support).
 - **Rate limiting:** chunked into 1-month batches (API max range)
 - **Retry logic:** 3 attempts with exponential backoff; retries on 429/500/502/503/504 and timeouts
 - **Response:** 15-minute ISP resolution with CET local timestamps (`timeInterval_start`), fields `dispatch_up` and `dispatch_down`
-- **`fetchImbalancePrices`** — aggregates 15-min points to daily average mid price `(dispatch_up + dispatch_down) / 2`
+- **`fetchImbalancePrices`** — returns `{ daily, rawPoints }`: daily = daily average mid price; rawPoints = full 15-min ISP points with `{ timestamp, midPrice }` for frontend hourly aggregation. Cache salt `v2|` to bust old daily-only cached responses.
 - **`fetchAFRRData`** — returns raw 15-min points with `{ timestamp, afrrUpEnergyPrice, afrrDownEnergyPrice }` so the frontend can aggregate at 15m / 1h / 1d
 
 ### `/api/afrr` route
@@ -221,9 +221,12 @@ Single Redis cache (`getCached` / `setCached`) used for both market data and res
 - **Legend toggle:** click any legend item to hide/show that series (uses `useLegendToggle` from `shared.jsx`)
 
 ### Balancing (`BalancingSection`)
-- **Imbalance Midprice NL** (EUR/MWh) — daily line chart from TenneT settlement-prices. Mid price = `(dispatch_up + dispatch_down) / 2` averaged over 15-min intervals per day.
-- **Imbalance Price Volatility** — weekly std dev bar chart, wind exposure signal
-- **Legend toggle** on both charts
+- **Imbalance Midprice NL** (EUR/MWh) — line chart from TenneT settlement-prices with **1h / 1d** resolution switcher (default 1d)
+  - **1d** — pre-aggregated daily average mid price from `imbalance.daily`
+  - **1h** — hourly average computed client-side from `imbalance.rawPoints` (15-min ISP data aggregated to 1h buckets by CET hour)
+  - Mid price per ISP = `(dispatch_up + dispatch_down) / 2`; daily average = mean of all ISP mid prices that day
+  - Red dashed zero reference line to clearly show when the system flips long/short
+  - Legend toggle
 
 ### Ancillary Services (`AncillaryServicesSection`)
 

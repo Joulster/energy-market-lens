@@ -62,7 +62,7 @@ app.get('/api/actual-generation', async (req, res) => {
 app.get('/api/imbalance-prices', async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:imbalance', startDate, endDate,
-    () => fetchImbalancePrices(startDate, endDate))
+    () => fetchImbalancePrices(startDate, endDate), 'v2|')
 })
 
 app.get('/api/afrr', async (req, res) => {

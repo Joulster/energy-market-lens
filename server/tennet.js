@@ -117,9 +117,17 @@ async function fetchSettlementPrices(startDate, endDate) {
 
 // ── Public fetchers ─────────────────────────────────────────────────────────
 
-// Imbalance mid price — (dispatch_up + dispatch_down) / 2, aggregated to daily
+// Imbalance mid price — returns both:
+//   rawPoints: 15-min CET timestamps with per-ISP midPrice (for frontend 1h aggregation)
+//   daily:     daily average mid price (for 1d view)
 export async function fetchImbalancePrices(startDate, endDate) {
   const points = await fetchSettlementPrices(startDate, endDate)
+
+  // Raw 15-min midPrice points for frontend hourly aggregation
+  const rawPoints = points.map(({ timestamp, dispatchUp, dispatchDown }) => ({
+    timestamp,
+    midPrice: (dispatchUp + dispatchDown) / 2,
+  }))
 
   const byDay = {}
   for (const { date, dispatchUp, dispatchDown } of points) {
@@ -141,7 +149,7 @@ export async function fetchImbalancePrices(startDate, endDate) {
       }
     })
 
-  return { daily }
+  return { daily, rawPoints }
 }
 
 // aFRR energy prices from TenneT settlement-prices (dispatch_up / dispatch_down).
