@@ -376,47 +376,29 @@ function dailyAvgFromPoints(points) {
   )
 }
 
-export async function fetchBalancingData(startDate, endDate) {
+// Fetch aFRR and FCR capacity procurement prices from ENTSO-E.
+// Uses document type A84 (Procurement document) with process types:
+//   A52 = aFRR capacity, A51 = FCR capacity
+// Parameter name is 'controlArea_Domain' (no .mRID suffix) per ENTSO-E A84 spec.
+// Returns { afrrCapacityByDay, fcrByDay } — plain date→price maps.
+export async function fetchCapacityPrices(startDate, endDate) {
   const ps = startDate ? toEntsoeDate(startDate) : periodStart()
-  const pe = endDate   ? toEntsoeDate(endDate)   : periodEnd()
+  const pe = endDate   ? toEntsoeDate(endDate, 1) : periodEnd()
 
-    // A73 = Procured Balancing Capacity (capacity prices)
-    // A85 = Activated Balancing Energy  (energy prices)
-    // businessType A96 = aFRR, A95 = FCR
-    // flowDirection.direction A01 = Up, A02 = Down
-    // ENTSO-E requires 'controlArea_Domain.mRID' (not just 'controlArea_Domain')
-    const [afrrCapRes, fcrCapRes, afrrUpRes, afrrDownRes] = await Promise.allSettled([
-      entsoeRequest({ documentType: 'A73', businessType: 'A96', 'type_MarketAgreement.Type': 'A01', 'controlArea_Domain.mRID': BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
-      entsoeRequest({ documentType: 'A73', businessType: 'A95', 'type_MarketAgreement.Type': 'A01', 'controlArea_Domain.mRID': BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
-      entsoeRequest({ documentType: 'A85', businessType: 'A96', 'flowDirection.direction': 'A01', 'controlArea_Domain.mRID': BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
-      entsoeRequest({ documentType: 'A85', businessType: 'A96', 'flowDirection.direction': 'A02', 'controlArea_Domain.mRID': BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
-    ])
+  const [afrrRes, fcrRes] = await Promise.allSettled([
+    entsoeRequest({ documentType: 'A84', processType: 'A52', controlArea_Domain: BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
+    entsoeRequest({ documentType: 'A84', processType: 'A51', controlArea_Domain: BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
+  ])
 
-    const extract = (res) => res.status === 'fulfilled' ? dailyAvgFromPoints(parseBalancingTimeSeries(res.value)) : {}
+  const extract = (res) => res.status === 'fulfilled'
+    ? dailyAvgFromPoints(parseBalancingTimeSeries(res.value))
+    : {}
 
-    const afrrCap  = extract(afrrCapRes)
-    const fcrCap   = extract(fcrCapRes)
-    const afrrUp   = extract(afrrUpRes)
-    const afrrDown = extract(afrrDownRes)
+  if (afrrRes.status === 'rejected') console.warn('ENTSO-E aFRR capacity fetch failed:', afrrRes.reason?.message)
+  if (fcrRes.status  === 'rejected') console.warn('ENTSO-E FCR capacity fetch failed:',  fcrRes.reason?.message)
 
-    // Collect all dates seen across any source
-    const dates = [...new Set([
-      ...Object.keys(afrrCap),
-      ...Object.keys(fcrCap),
-      ...Object.keys(afrrUp),
-      ...Object.keys(afrrDown),
-    ])].sort()
-
-    if (!dates.length) throw new Error('No balancing data parsed from ENTSO-E responses')
-
-    const daily = dates.map(date => ({
-      date,
-      afrrCapacityPrice: afrrCap[date] ?? null,
-      afrrUpEnergyPrice: afrrUp[date]  ?? null,
-      afrrDownEnergyPrice: afrrDown[date] ?? null,
-      fcrPrice: fcrCap[date] ?? null,
-    }))
-
-
-  return { daily }
+  return {
+    afrrCapacityByDay: extract(afrrRes),
+    fcrByDay:          extract(fcrRes),
+  }
 }

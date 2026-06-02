@@ -4,7 +4,7 @@ import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
 import { traceable } from 'langsmith/traceable'
-import { fetchDayAheadPrices, fetchActualGeneration } from './entso-e.js'
+import { fetchDayAheadPrices, fetchActualGeneration, fetchCapacityPrices } from './entso-e.js'
 import { fetchImbalancePrices, fetchAFRRData } from './tennet.js'
 import { generateNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
 import { getCached, setCached } from './researchCache.js'
@@ -67,8 +67,25 @@ app.get('/api/imbalance-prices', async (req, res) => {
 
 app.get('/api/afrr', async (req, res) => {
   const { startDate, endDate } = req.query
-  await cachedMarketRoute(res, 'market:afrr', startDate, endDate,
-    () => fetchAFRRData(startDate, endDate))
+  await cachedMarketRoute(res, 'market:afrr', startDate, endDate, async () => {
+    // TenneT: energy prices (dispatch_up / dispatch_down from settlement-prices)
+    // ENTSO-E: capacity prices (A84 procurement document, A52=aFRR, A51=FCR)
+    const [tennet, entsoe] = await Promise.all([
+      fetchAFRRData(startDate, endDate),
+      fetchCapacityPrices(startDate, endDate).catch(err => {
+        console.warn('ENTSO-E capacity prices fetch failed:', err.message)
+        return { afrrCapacityByDay: {}, fcrByDay: {} }
+      }),
+    ])
+    const { afrrCapacityByDay, fcrByDay } = entsoe
+    return {
+      daily: tennet.daily.map(d => ({
+        ...d,
+        afrrCapacityPrice: afrrCapacityByDay[d.date] ?? null,
+        fcrPrice:          fcrByDay[d.date]          ?? null,
+      }))
+    }
+  })
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
