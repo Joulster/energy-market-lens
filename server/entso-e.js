@@ -1,4 +1,5 @@
 import { format, subDays, startOfDay } from 'date-fns'
+import AdmZip from 'adm-zip'
 
 
 const BASE_URL = 'https://web-api.tp.entsoe.eu/api'
@@ -84,6 +85,70 @@ async function entsoeRequest(params, attempt = 1) {
   }
 
   return res.text()
+}
+
+// Like entsoeRequest but returns a Buffer (for ZIP responses)
+async function entsoeRequestBinary(params, attempt = 1) {
+  const key = process.env.ENTSOE_API_KEY
+  if (!key) throw new Error('ENTSOE_API_KEY not configured')
+
+  const url = new URL(BASE_URL)
+  url.searchParams.set('securityToken', key)
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
+
+  const safeUrl = (() => {
+    const u = new URL(url.toString())
+    u.searchParams.set('securityToken', '***')
+    return u.toString()
+  })()
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ENTSOE_TIMEOUT_MS)
+
+  let res
+  try {
+    res = await fetch(url.toString(), { signal: controller.signal })
+  } catch (err) {
+    clearTimeout(timer)
+    const isTimeout = err.name === 'AbortError'
+    const msg = isTimeout
+      ? `ENTSO-E request timed out after ${ENTSOE_TIMEOUT_MS / 1000}s`
+      : `ENTSO-E network error: ${err.message}`
+    if (attempt < ENTSOE_MAX_RETRIES) {
+      const delay = ENTSOE_RETRY_BASE_MS * 2 ** (attempt - 1)
+      console.warn(`  ↺ ${msg} — retrying in ${delay}ms (attempt ${attempt}/${ENTSOE_MAX_RETRIES}) [${safeUrl}]`)
+      await new Promise(r => setTimeout(r, delay))
+      return entsoeRequestBinary(params, attempt + 1)
+    }
+    throw new Error(`${msg} (all ${ENTSOE_MAX_RETRIES} attempts exhausted)`)
+  } finally {
+    clearTimeout(timer)
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    const reason = body.match(/<Text>([\s\S]*?)<\/Text>/)?.[1]?.trim()
+      ?? body.match(/<code>([\s\S]*?)<\/code>/)?.[1]?.trim()
+      ?? `status ${res.status}`
+    const err = new Error(`ENTSO-E ${res.status}: ${reason}`)
+    if (RETRYABLE_STATUSES.has(res.status) && attempt < ENTSOE_MAX_RETRIES) {
+      const delay = ENTSOE_RETRY_BASE_MS * 2 ** (attempt - 1)
+      console.warn(`  ↺ ${err.message} — retrying in ${delay}ms (attempt ${attempt}/${ENTSOE_MAX_RETRIES})`)
+      await new Promise(r => setTimeout(r, delay))
+      return entsoeRequestBinary(params, attempt + 1)
+    }
+    throw err
+  }
+
+  return Buffer.from(await res.arrayBuffer())
+}
+
+// Extract the first XML file from a ZIP buffer. Returns the XML string.
+function unzipXml(buffer) {
+  const zip = new AdmZip(buffer)
+  const entry = zip.getEntries().find(e => e.entryName.endsWith('.xml'))
+  if (!entry) throw new Error('No XML found in ENTSO-E ZIP response')
+  return entry.getData().toString('utf8')
 }
 
 function parseXmlTimeSeries(xml) {
@@ -377,22 +442,38 @@ function dailyAvgFromPoints(points) {
 }
 
 // Fetch aFRR and FCR capacity procurement prices from ENTSO-E.
-// Uses document type A84 (Procurement document) with process types:
-//   A52 = aFRR capacity, A51 = FCR capacity
-// Parameter name is 'controlArea_Domain' (no .mRID suffix) per ENTSO-E A84 spec.
+// Document type A81 (Contracted reserves), businessType B95 (Procured capacity).
+// Process types: A51 = aFRR, A52 = FCR (per ENTSO-E balancing document mapping).
+// Agreement type A01 = Daily (D-1 procurement used by TenneT NL).
+// Response is a ZIP file containing XML — requires binary fetch + decompress.
 // Returns { afrrCapacityByDay, fcrByDay } — plain date→price maps.
 export async function fetchCapacityPrices(startDate, endDate) {
   const ps = startDate ? toEntsoeDate(startDate) : periodStart()
   const pe = endDate   ? toEntsoeDate(endDate, 1) : periodEnd()
 
+  const base = {
+    documentType: 'A81',
+    businessType: 'B95',
+    controlArea_Domain: BIDDING_ZONE,
+    'type_MarketAgreement.Type': 'A01',
+    periodStart: ps,
+    periodEnd: pe,
+  }
+
   const [afrrRes, fcrRes] = await Promise.allSettled([
-    entsoeRequest({ documentType: 'A84', processType: 'A52', controlArea_Domain: BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
-    entsoeRequest({ documentType: 'A84', processType: 'A51', controlArea_Domain: BIDDING_ZONE, periodStart: ps, periodEnd: pe }),
+    entsoeRequestBinary({ ...base, processType: 'A51' }),
+    entsoeRequestBinary({ ...base, processType: 'A52' }),
   ])
 
-  const extract = (res) => res.status === 'fulfilled'
-    ? dailyAvgFromPoints(parseBalancingTimeSeries(res.value))
-    : {}
+  const extract = (res) => {
+    if (res.status === 'rejected') return {}
+    try {
+      return dailyAvgFromPoints(parseBalancingTimeSeries(unzipXml(res.value)))
+    } catch (e) {
+      console.warn('ENTSO-E capacity ZIP parse error:', e.message)
+      return {}
+    }
+  }
 
   if (afrrRes.status === 'rejected') console.warn('ENTSO-E aFRR capacity fetch failed:', afrrRes.reason?.message)
   if (fcrRes.status  === 'rejected') console.warn('ENTSO-E FCR capacity fetch failed:',  fcrRes.reason?.message)
