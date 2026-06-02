@@ -93,7 +93,7 @@ body {
 .app-body {
   display: flex;
   flex: 1;
-  overflow: hidden;
+  align-items: flex-start;
 }
 
 .panel-resizer {
@@ -142,7 +142,6 @@ body {
 /* ── Charts panel (left 75%) ─────────────────────────────────────────────── */
 .charts-panel {
   flex: 0 0 75%; /* overridden by inline style when resizer is used */
-  overflow-y: auto;
   padding: 24px;
   display: flex;
   flex-direction: column;
@@ -423,11 +422,12 @@ body {
   flex: 0 0 25%; /* overridden by inline style when resizer is used */
   position: sticky;
   top: 53px;
-  height: calc(100vh - 53px);
+  max-height: calc(100vh - 53px);
   overflow-y: auto;
   background: #0d1117;
   border-left: none;
   padding: 20px;
+  padding-bottom: 32px;
   display: flex;
   flex-direction: column;
   gap: 12px;
