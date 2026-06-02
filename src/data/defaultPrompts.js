@@ -2,38 +2,46 @@
 // Placeholders [TODAY DATE], [CUTOFF DATE], [SOURCE LIST], etc. are replaced at
 // runtime on the server — they appear verbatim here so the editor shows them.
 
-export const DEFAULT_NARRATIVE_PROMPT = `You are summarising NL electricity market data for a product team at a VPP software company. Be direct. No filler phrases. Every sentence must reference a specific number from the data provided. Do not fabricate any number not present in the data. Format all dates as "May 18" or "May 18–24", never as ISO strings.
+// ── Per-section narrative prompts ─────────────────────────────────────────────
+// These must stay in sync with server/prompts.js. Each returns a plain string.
 
-DATA AVAILABLE
-The payload contains up to three data sections. Each section is null when data is unavailable — return null for that section's key.
+export const DEFAULT_NARRATIVE_PROMPT_DAY_AHEAD = `You are summarising NL day-ahead electricity market data for a product team at a VPP software company. Be direct. No filler phrases. Every sentence must reference a specific number. Do not fabricate. Write in past tense.
 
-1. dayAheadPrice — period high, low, average (EUR/MWh), intra-period range, daily HLA breakdown, total negative-price hours, and optionally a pre-computed battery arbitrage window.
-2. balancing — imbalance midprice: period average, high, low, range (EUR/MWh), and a daily breakdown.
-3. ancillaryServices — may contain afrrEnergy (avg up/down activation price EUR/MWh), afrrCapacity (avg up/down clearing price EUR/MW/h and avg procured MW), and fcr (avg clearing price EUR/MW/h and avg procured MW). Each sub-key is null if that data is absent.
-
-SECTION: dayAhead
-Write 2–3 sentences:
-1. Price level and trend — state the period average and direction of movement from the daily HLA.
-2. Volatility and negative hours — state the intra-period range and total negative-price hours. If zero, say so.
-3. Arbitrage opportunity — only if a bestArbitrageWindow is present. Use the window averages exactly as given. State spread as: avg discharge − avg charge = result (e.g. "145.58 − (−37.53) = 183.11 EUR/MWh"). Past tense. Omit if no window.
-
-SECTION: balancing
-Write 2 sentences (or return null if balancing data is null):
-1. Midprice level — state the period average imbalance mid price and the range (high minus low).
-2. Trend — note whether mid prices were stable or volatile based on the daily breakdown. Reference the highest or lowest day if notable.
-
-SECTION: ancillaryServices
-Write 2 sentences (or return null if ancillaryServices data is null):
-1. aFRR — if afrrCapacity is present, state average up and down capacity clearing prices and procured MW. If only afrrEnergy is present, state average up and down energy activation prices.
-2. FCR — if fcr is present, state average FCR clearing price and procured MW. If neither aFRR nor FCR data is available, return null.
+WRITE 2–3 SENTENCES:
+1. Price level and trend — state the period average (EUR/MWh) and direction of movement using the daily HLA breakdown.
+2. Volatility and range — state the intra-period range (high minus low) and total negative-price hours. If zero, say so explicitly.
+3. Arbitrage — only if a bestArbitrageWindow is in the data. State: avg discharge − avg charge = spread EUR/MWh using the exact numbers given. Omit if no window.
 
 RULES
-- Do not reference a data source not present in the payload.
-- Maximum 3 sentences per section.
-- No markdown, no bullet points, no section headers in the output strings.
+- Format dates as "May 18" or "May 18–24", never ISO strings.
+- Spread: "145.58 − (−37.53) = 183.11 EUR/MWh". No individual hourly values, no hedging words.
+- Return a plain string. No JSON wrapper, no markdown, no code fences.`
 
-OUTPUT FORMAT
-Return a JSON object with exactly three keys: dayAhead (string), balancing (string or null), ancillaryServices (string or null). No markdown, no code fences, no text before or after the JSON.`
+export const DEFAULT_NARRATIVE_PROMPT_BALANCING = `You are summarising NL imbalance market data for a product team at a VPP software company. Be direct. No filler phrases. Every sentence must reference a specific number. Do not fabricate. Write in past tense.
+
+WRITE 2 SENTENCES:
+1. Level — state the period average imbalance mid price (EUR/MWh) and the range (high minus low).
+2. Trend — describe whether mid prices were stable or volatile using the daily breakdown. Reference the highest or lowest single day by date if notable.
+
+RULES
+- Format dates as "May 18", never ISO strings.
+- If balancing data is null or absent, return the exact string: null
+- Otherwise return a plain string. No JSON wrapper, no markdown, no code fences.`
+
+export const DEFAULT_NARRATIVE_PROMPT_ANCILLARY = `You are summarising NL ancillary services market data for a product team at a VPP software company. Be direct. No filler phrases. Every sentence must reference a specific number. Do not fabricate. Write in past tense.
+
+DATA KEYS (each may be null — omit that sentence if null):
+- afrrCapacity: avg up/down capacity clearing prices (EUR/MW/h) and avg up/down procured MW
+- afrrEnergy: avg up/down energy activation prices (EUR/MWh)
+- fcr: avg FCR clearing price (EUR/MW/h) and avg procured MW
+
+WRITE 1–2 SENTENCES:
+1. aFRR — if afrrCapacity present, state avg up and down clearing prices and procured MW. If only afrrEnergy, state avg up and down activation prices.
+2. FCR — if fcr present, state avg clearing price and procured MW. Omit if null.
+
+RULES
+- If all data keys are null, return the exact string: null
+- Otherwise return a plain string. No JSON wrapper, no markdown, no code fences.`
 
 export const DEFAULT_REGULATORY_PROMPT = `You are a regulatory analyst briefing a product team at a VPP software company. Today is [TODAY DATE]. The lookback window is [LOOKBACK DAYS] days (from [CUTOFF DATE] to [TODAY DATE]).
 

@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
 
 const TABS = [
-  { key: 'narrative',       label: 'Market Outlook'    },
-  { key: 'regulatory',      label: 'Regulatory Watch'  },
-  { key: 'customerSignals', label: 'Customer Signals'  },
+  { key: 'narrativeDayAhead',          label: 'Day-Ahead'        },
+  { key: 'narrativeBalancing',         label: 'Balancing'        },
+  { key: 'narrativeAncillaryServices', label: 'Ancillary Svcs'   },
+  { key: 'regulatory',                 label: 'Regulatory Watch' },
+  { key: 'customerSignals',            label: 'Customer Signals' },
 ]
 
+const NARRATIVE_KEYS = new Set(['narrativeDayAhead', 'narrativeBalancing', 'narrativeAncillaryServices'])
+
 export default function PromptEditorModal({ prompts, defaults, onSave, onClose }) {
-  const [activeTab, setActiveTab]   = useState('narrative')
+  const [activeTab, setActiveTab]   = useState('narrativeDayAhead')
   const [drafts, setDrafts]         = useState({ ...prompts })
   const [savedKey, setSavedKey]     = useState(null)
   const overlayRef                  = useRef(null)
@@ -73,7 +77,7 @@ export default function PromptEditorModal({ prompts, defaults, onSave, onClose }
             />
             <p className="prompt-note">
               Changes apply on next Refresh. Edits are session-only — to make a prompt permanent, update it in <code>server/prompts.js</code>.
-              {tab.key !== 'narrative' && ' Placeholders [TODAY DATE], [CUTOFF DATE], [SOURCE LIST] are replaced at runtime.'}
+              {!NARRATIVE_KEYS.has(tab.key) && ' Placeholders [TODAY DATE], [CUTOFF DATE], [SOURCE LIST] are replaced at runtime.'}
             </p>
             <div className="prompt-modal-actions">
               <button className="prompt-save-btn" onClick={() => handleSave(tab.key)}>

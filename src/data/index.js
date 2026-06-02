@@ -1,11 +1,11 @@
 // ── Client-side caches ─────────────────────────────────────────────────────
-// Market data: keyed on full URL, 15-min TTL.
-// Narrative:   keyed on startDate|endDate|systemPrompt, session-scoped (no TTL).
-//              Historical ranges never change; the Regenerate button busts the
-//              cache explicitly when the user wants a fresh result.
-const CACHE_TTL_MS  = 15 * 60 * 1000
-const cache         = new Map()   // market data
-const narrativeCache = new Map()  // AI summaries
+// Market data:       keyed on full URL, 15-min TTL.
+// Section narrative: keyed on section|startDate|endDate|systemPrompt, session-scoped (no TTL).
+//                    Historical ranges never change; the Regenerate button busts the
+//                    cache explicitly when the user wants a fresh result.
+const CACHE_TTL_MS         = 15 * 60 * 1000
+const cache                = new Map()   // market data
+const sectionNarrativeCache = new Map()  // per-section AI summaries
 
 async function apiFetch(path) {
   const cached = cache.get(path)
@@ -61,25 +61,29 @@ export async function loadAllMarketData(startDate, endDate) {
   }
 }
 
-export async function fetchNarrative(marketData, systemPrompt, startDate, endDate, forceRefresh = false) {
-  const cacheKey = `${startDate}|${endDate}|${systemPrompt}`
+// Fetch the AI narrative for a single section.
+// section:     'dayAhead' | 'balancing' | 'ancillaryServices'
+// fullPayload: the object returned by buildNarrativePayload() — the server
+//              generator accesses only the keys it needs for each section.
+export async function fetchSectionNarrative(section, fullPayload, systemPrompt, startDate, endDate, forceRefresh = false) {
+  const cacheKey = `${section}|${startDate}|${endDate}|${systemPrompt}`
 
   if (!forceRefresh) {
-    const cached = narrativeCache.get(cacheKey)
-    if (cached) return { ok: true, narrative: cached, fromCache: true }
+    const cached = sectionNarrativeCache.get(cacheKey)
+    if (cached !== undefined) return { ok: true, narrative: cached, fromCache: true }
   }
 
   try {
     const res = await fetch('/api/narrative', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketData, systemPrompt, startDate, endDate, forceRefresh }),
+      body: JSON.stringify({ section, sectionData: fullPayload, systemPrompt, startDate, endDate, forceRefresh }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const json = await res.json()
     if (!json.ok) throw new Error(json.error || 'Narrative failed')
-    narrativeCache.set(cacheKey, json.narrative)
-    return { ok: true, narrative: json.narrative, fromCache: false }
+    sectionNarrativeCache.set(cacheKey, json.narrative)
+    return { ok: true, narrative: json.narrative, fromCache: false, cachedAt: json.cachedAt }
   } catch (err) {
     return { ok: false, narrative: null, error: err.message }
   }

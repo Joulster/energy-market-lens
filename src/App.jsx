@@ -5,15 +5,19 @@ import PromptEditorModal from './components/PromptEditorModal.jsx'
 import { loadSourceData } from './data/index.js'
 import { computeDates } from './data/dateRange.js'
 import {
-  DEFAULT_NARRATIVE_PROMPT,
+  DEFAULT_NARRATIVE_PROMPT_DAY_AHEAD,
+  DEFAULT_NARRATIVE_PROMPT_BALANCING,
+  DEFAULT_NARRATIVE_PROMPT_ANCILLARY,
   DEFAULT_REGULATORY_PROMPT,
   DEFAULT_CUSTOMER_SIGNALS_PROMPT,
 } from './data/defaultPrompts.js'
 
 const PROMPT_DEFAULTS = {
-  narrative:       DEFAULT_NARRATIVE_PROMPT,
-  regulatory:      DEFAULT_REGULATORY_PROMPT,
-  customerSignals: DEFAULT_CUSTOMER_SIGNALS_PROMPT,
+  narrativeDayAhead:          DEFAULT_NARRATIVE_PROMPT_DAY_AHEAD,
+  narrativeBalancing:         DEFAULT_NARRATIVE_PROMPT_BALANCING,
+  narrativeAncillaryServices: DEFAULT_NARRATIVE_PROMPT_ANCILLARY,
+  regulatory:                 DEFAULT_REGULATORY_PROMPT,
+  customerSignals:            DEFAULT_CUSTOMER_SIGNALS_PROMPT,
 }
 
 function MagicPencilLogo() {
@@ -115,7 +119,7 @@ export default function App() {
         <ChartsPanel
           data={marketData}
           dataLoading={dataLoading}
-          narrativePrompt={promptSettings.narrative}
+          narrativePrompts={promptSettings}
           selectedRange={selectedRange}
           onRangeChange={setSelectedRange}
           style={{ flex: `0 0 ${leftWidth}%` }}

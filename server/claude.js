@@ -1,6 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { traceable } from 'langsmith/traceable'
-import { NARRATIVE_PROMPT, REGULATORY_PROMPT, CUSTOMER_SIGNALS_PROMPT, PROMPT_VERSIONS } from './prompts.js'
+import {
+  NARRATIVE_PROMPT_DAY_AHEAD,
+  NARRATIVE_PROMPT_BALANCING,
+  NARRATIVE_PROMPT_ANCILLARY,
+  REGULATORY_PROMPT,
+  CUSTOMER_SIGNALS_PROMPT,
+  PROMPT_VERSIONS,
+} from './prompts.js'
 
 // Client is created lazily so a missing API key doesn't crash the server on startup
 let _client = null
@@ -9,28 +16,65 @@ function getClient() {
   return _client
 }
 
-// ── generateNarrative ────────────────────────────────────────────────────────
-// Wrapped with traceable() so every call appears in LangSmith with token usage,
-// latency, model name, and prompt_version. Returns { result, _langsmithMeta }
-// — callers destructure result; _langsmithMeta is recorded in the trace output.
-export const generateNarrative = traceable(
-  async function generateNarrative(marketData, systemPromptOverride, startDate, endDate) {
-    const { period, dayAheadPrice, negativeHoursPerWeek } = marketData
-    const systemPrompt = systemPromptOverride?.trim() || NARRATIVE_PROMPT
+// ── Shared helpers ────────────────────────────────────────────────────────────
 
-    const periodStr = (startDate && endDate)
-      ? `${startDate} to ${endDate}`
-      : period
-      ? `${period.from} to ${period.to}`
-      : 'last 7 days'
+function periodStr(sectionData, startDate, endDate) {
+  if (startDate && endDate) return `${startDate} to ${endDate}`
+  const p = sectionData?.period
+  return p ? `${p.from} to ${p.to}` : 'last 7 days'
+}
+
+// Call Haiku with a plain-text system prompt and user message.
+// Returns the raw text response (stripped of code fences), or null if the
+// model returned the literal string "null".
+async function callHaiku(systemPrompt, userMessage) {
+  const t0 = Date.now()
+  const message = await getClient().messages.create({
+    model:      'claude-haiku-4-5',
+    max_tokens: 512,
+    system:     systemPrompt,
+    messages:   [{ role: 'user', content: userMessage }],
+  })
+  const latencyMs = Date.now() - t0
+
+  const textBlock = message.content.find(b => b.type === 'text')
+  if (!textBlock) throw new Error('No text block in Claude response')
+
+  const text = textBlock.text
+    .replace(/^```(?:\w+)?\s*/m, '')
+    .replace(/\s*```\s*$/m, '')
+    .trim()
+
+  return {
+    result:        text === 'null' ? null : text,
+    _langsmithMeta: {
+      inputTokens:         message.usage.input_tokens,
+      outputTokens:        message.usage.output_tokens,
+      cacheReadTokens:     message.usage.cache_read_input_tokens    ?? 0,
+      cacheCreationTokens: message.usage.cache_creation_input_tokens ?? 0,
+      model:               message.model,
+      stopReason:          message.stop_reason,
+      latencyMs,
+    },
+  }
+}
+
+// ── generateDayAheadNarrative ────────────────────────────────────────────────
+export const generateDayAheadNarrative = traceable(
+  async function generateDayAheadNarrative(sectionData, systemPromptOverride, startDate, endDate) {
+    const systemPrompt = systemPromptOverride?.trim() || NARRATIVE_PROMPT_DAY_AHEAD
+    const { dayAheadPrice, negativeHoursPerWeek } = sectionData
 
     const dailyHLAStr = dayAheadPrice?.dailyHLA?.length
-      ? dayAheadPrice.dailyHLA.map(d => `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}, negHours ${d.negativeHours}`).join('\n')
+      ? dayAheadPrice.dailyHLA.map(d =>
+          `  ${d.date}: avg ${fmt(d.avg)}, high ${fmt(d.high)}, low ${fmt(d.low)}, negHours ${d.negativeHours}`
+        ).join('\n')
       : '  N/A'
 
     const w = dayAheadPrice?.bestArbitrageWindow
     const arbitrageStr = w
-      ? `  ${w.date}: charge ${w.chargeWindow.startHour}:00–${w.chargeWindow.endHour}:00 avg ${fmt(w.chargeWindow.avgPrice)} EUR/MWh` +
+      ? `Pre-computed arbitrage window (use these numbers directly — do not recompute):\n` +
+        `  ${w.date}: charge ${w.chargeWindow.startHour}:00–${w.chargeWindow.endHour}:00 avg ${fmt(w.chargeWindow.avgPrice)} EUR/MWh` +
         ` | discharge ${w.dischargeWindow.startHour}:00–${w.dischargeWindow.endHour}:00 avg ${fmt(w.dischargeWindow.avgPrice)} EUR/MWh` +
         ` | spread ${fmt(w.dischargeWindow.avgPrice)} − (${fmt(w.chargeWindow.avgPrice)}) = ${fmt(w.spread)} EUR/MWh`
       : null
@@ -39,60 +83,117 @@ export const generateNarrative = traceable(
       ? negativeHoursPerWeek.map(d => `  ${d.week}: ${d.count} hours`).join('\n')
       : '  N/A'
 
-    const userMessage = `NL energy market data for ${periodStr}:
+    const userMessage =
+`NL day-ahead price data for ${periodStr(sectionData, startDate, endDate)}:
 
-Chart 1 — Day-Ahead Price NL (EUR/MWh):
-- Period average: ${fmt(dayAheadPrice?.avgEurMwh)}
-- Period high: ${fmt(dayAheadPrice?.highEurMwh)}
-- Period low: ${fmt(dayAheadPrice?.lowEurMwh)}
-- Intra-period range (high minus low): ${fmt(dayAheadPrice?.rangeEurMwh)}
-- Negative price hours total: ${dayAheadPrice?.negativeHours ?? 'N/A'}
-- Daily HLA breakdown:
+Period average: ${fmt(dayAheadPrice?.avgEurMwh)} EUR/MWh
+Period high: ${fmt(dayAheadPrice?.highEurMwh)} EUR/MWh
+Period low: ${fmt(dayAheadPrice?.lowEurMwh)} EUR/MWh
+Intra-period range: ${fmt(dayAheadPrice?.rangeEurMwh)} EUR/MWh
+Total negative-price hours: ${dayAheadPrice?.negativeHours ?? 'N/A'}
+
+Daily HLA:
 ${dailyHLAStr}
-${arbitrageStr ? `- Pre-computed arbitrage windows (use these numbers directly — do not recompute):\n${arbitrageStr}\n` : ''}
-Chart 2 — Negative Price Hours per Week:
+
+${arbitrageStr ?? 'No arbitrage window available.'}
+
+Negative-price hours per week:
 ${negHoursStr}
 
-Write the briefing JSON now.`
+Write the summary now.`
 
-    const t0 = Date.now()
-    const message = await getClient().messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    })
-    const latencyMs = Date.now() - t0
-
-    const textBlock = message.content.find(b => b.type === 'text')
-    if (!textBlock) throw new Error('No text block in Claude response')
-
-    const stripped = textBlock.text
-      .replace(/^```(?:json)?\s*/m, '')
-      .replace(/\s*```\s*$/m, '')
-      .trim()
-
-    const jsonMatch = stripped.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('No JSON found in Claude response')
-
-    const result = JSON.parse(jsonMatch[0])
-    return {
-      result,
-      _langsmithMeta: {
-        inputTokens:         message.usage.input_tokens,
-        outputTokens:        message.usage.output_tokens,
-        cacheReadTokens:     message.usage.cache_read_input_tokens    ?? 0,
-        cacheCreationTokens: message.usage.cache_creation_input_tokens ?? 0,
-        model:               message.model,
-        stopReason:          message.stop_reason,
-        latencyMs,
-      },
-    }
+    return callHaiku(systemPrompt, userMessage)
   },
   {
-    name:     'generateNarrative',
+    name:     'generateDayAheadNarrative',
     run_type: 'llm',
-    metadata: { model: 'claude-haiku-4-5', prompt_version: PROMPT_VERSIONS.narrative },
+    metadata: { model: 'claude-haiku-4-5', prompt_version: PROMPT_VERSIONS.narrativeDayAhead },
+  }
+)
+
+// ── generateBalancingNarrative ────────────────────────────────────────────────
+export const generateBalancingNarrative = traceable(
+  async function generateBalancingNarrative(sectionData, systemPromptOverride, startDate, endDate) {
+    const systemPrompt = systemPromptOverride?.trim() || NARRATIVE_PROMPT_BALANCING
+    const b = sectionData?.balancing
+
+    if (!b) {
+      return { result: null, _langsmithMeta: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, model: 'claude-haiku-4-5', stopReason: 'skipped', latencyMs: 0 } }
+    }
+
+    // Find the highest and lowest day for trend context
+    const sorted = [...(b.daily ?? [])].sort((a, x) => a.midPrice - x.midPrice)
+    const lowestDay  = sorted[0]
+    const highestDay = sorted[sorted.length - 1]
+
+    const dailyStr = b.daily?.length
+      ? b.daily.map(d => `  ${d.date}: ${fmt(d.midPrice)}`).join('\n')
+      : '  N/A'
+
+    const userMessage =
+`NL imbalance midprice data for ${periodStr(sectionData, startDate, endDate)}:
+
+Period average: ${fmt(b.avgMidPriceEurMwh)} EUR/MWh
+Period high: ${fmt(b.highMidPriceEurMwh)} EUR/MWh${highestDay ? ` (${highestDay.date})` : ''}
+Period low: ${fmt(b.lowMidPriceEurMwh)} EUR/MWh${lowestDay ? ` (${lowestDay.date})` : ''}
+Range (high − low): ${fmt(b.rangeEurMwh)} EUR/MWh
+
+Daily mid prices:
+${dailyStr}
+
+Write the summary now.`
+
+    return callHaiku(systemPrompt, userMessage)
+  },
+  {
+    name:     'generateBalancingNarrative',
+    run_type: 'llm',
+    metadata: { model: 'claude-haiku-4-5', prompt_version: PROMPT_VERSIONS.narrativeBalancing },
+  }
+)
+
+// ── generateAncillaryNarrative ────────────────────────────────────────────────
+export const generateAncillaryNarrative = traceable(
+  async function generateAncillaryNarrative(sectionData, systemPromptOverride, startDate, endDate) {
+    const systemPrompt = systemPromptOverride?.trim() || NARRATIVE_PROMPT_ANCILLARY
+    const a = sectionData?.ancillaryServices
+
+    if (!a) {
+      return { result: null, _langsmithMeta: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, model: 'claude-haiku-4-5', stopReason: 'skipped', latencyMs: 0 } }
+    }
+
+    const lines = []
+    if (a.afrrCapacity) {
+      lines.push('aFRR Capacity:')
+      lines.push(`  Avg up clearing price: ${fmt(a.afrrCapacity.avgUpPriceEurMwPerH)} EUR/MW/h | Avg up procured: ${fmt(a.afrrCapacity.avgUpMW)} MW`)
+      lines.push(`  Avg down clearing price: ${fmt(a.afrrCapacity.avgDownPriceEurMwPerH)} EUR/MW/h | Avg down procured: ${fmt(a.afrrCapacity.avgDownMW)} MW`)
+    }
+    if (a.afrrEnergy) {
+      lines.push('aFRR Energy:')
+      lines.push(`  Avg up activation price: ${fmt(a.afrrEnergy.avgUpEurMwh)} EUR/MWh`)
+      lines.push(`  Avg down activation price: ${fmt(a.afrrEnergy.avgDownEurMwh)} EUR/MWh`)
+    }
+    if (a.fcr) {
+      lines.push('FCR:')
+      lines.push(`  Avg clearing price: ${fmt(a.fcr.avgPriceEurMwPerH)} EUR/MW/h | Avg procured: ${fmt(a.fcr.avgCapacityMW)} MW`)
+    }
+    if (!lines.length) {
+      return { result: null, _langsmithMeta: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0, model: 'claude-haiku-4-5', stopReason: 'skipped', latencyMs: 0 } }
+    }
+
+    const userMessage =
+`NL ancillary services data for ${periodStr(sectionData, startDate, endDate)}:
+
+${lines.join('\n')}
+
+Write the summary now.`
+
+    return callHaiku(systemPrompt, userMessage)
+  },
+  {
+    name:     'generateAncillaryNarrative',
+    run_type: 'llm',
+    metadata: { model: 'claude-haiku-4-5', prompt_version: PROMPT_VERSIONS.narrativeAncillaryServices },
   }
 )
 

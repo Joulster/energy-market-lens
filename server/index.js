@@ -6,7 +6,7 @@ import path from 'path'
 import { traceable } from 'langsmith/traceable'
 import { fetchDayAheadPrices, fetchActualGeneration, fetchCapacityPrices } from './entso-e.js'
 import { fetchImbalancePrices, fetchAFRRData } from './tennet.js'
-import { generateNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
+import { generateDayAheadNarrative, generateBalancingNarrative, generateAncillaryNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
 import { getCached, setCached } from './researchCache.js'
 
 dotenv.config()
@@ -92,15 +92,26 @@ const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
 // the cache-hit decision. When fromCache is true, the child LLM span never fires
 // — the trace correctly records 0 tokens for that request.
 
+// One handler per section — each caches under its own namespace so sections
+// are independently cacheable and independently re-generatable.
+const NARRATIVE_GENERATORS = {
+  dayAhead:          generateDayAheadNarrative,
+  balancing:         generateBalancingNarrative,
+  ancillaryServices: generateAncillaryNarrative,
+}
+
 const _narrativeHandler = traceable(
-  async function narrativeRoute({ marketData, systemPrompt, startDate, endDate, forceRefresh }) {
+  async function narrativeRoute({ section, sectionData, systemPrompt, startDate, endDate, forceRefresh }) {
     const fingerprint = JSON.stringify({ startDate, endDate, prompt: systemPrompt ?? '' })
+    const cacheNs     = `narrative:${section}`
     if (!forceRefresh) {
-      const hit = await getCached('narrative', fingerprint)
+      const hit = await getCached(cacheNs, fingerprint)
       if (hit) return { narrative: hit.items, fromCache: true, cachedAt: hit.cachedAt }
     }
-    const { result: narrative } = await generateNarrative(marketData, systemPrompt, startDate, endDate)
-    await setCached('narrative', fingerprint, narrative, NARRATIVE_TTL)
+    const generator = NARRATIVE_GENERATORS[section]
+    if (!generator) throw new Error(`Unknown narrative section: ${section}`)
+    const { result: narrative } = await generator(sectionData, systemPrompt, startDate, endDate)
+    await setCached(cacheNs, fingerprint, narrative, NARRATIVE_TTL)
     return { narrative, fromCache: false, cachedAt: new Date().toISOString() }
   },
   { name: 'narrativeRoute', run_type: 'chain', metadata: { service: 'energy-market-lens' } }
@@ -132,9 +143,10 @@ const _customerSignalsHandler = traceable(
 
 app.post('/api/narrative', async (req, res) => {
   try {
-    const { marketData, systemPrompt, startDate, endDate, forceRefresh } = req.body
-    if (!marketData) return res.status(400).json({ error: 'marketData required' })
-    const { narrative, fromCache, cachedAt } = await _narrativeHandler({ marketData, systemPrompt, startDate, endDate, forceRefresh })
+    const { section, sectionData, systemPrompt, startDate, endDate, forceRefresh } = req.body
+    if (!section)      return res.status(400).json({ error: 'section required (dayAhead | balancing | ancillaryServices)' })
+    if (!sectionData)  return res.status(400).json({ error: 'sectionData required' })
+    const { narrative, fromCache, cachedAt } = await _narrativeHandler({ section, sectionData, systemPrompt, startDate, endDate, forceRefresh })
     res.json({ ok: true, narrative, fromCache, cachedAt })
   } catch (err) {
     console.error('narrative error:', err.message)

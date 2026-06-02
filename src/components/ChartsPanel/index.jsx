@@ -2,18 +2,34 @@ import { useState, useEffect } from 'react'
 import DayAheadSection from '../charts/DayAheadSection.jsx'
 import BalancingSection from '../charts/BalancingSection.jsx'
 import AncillaryServicesSection from '../charts/AncillaryServicesSection.jsx'
-import { buildNarrativePayload, fetchNarrative, loadAllMarketData } from '../../data/index.js'
+import { buildNarrativePayload, fetchSectionNarrative, loadAllMarketData } from '../../data/index.js'
 import { RANGE_OPTIONS, computeDates, computePrevDates } from '../../data/dateRange.js'
 
-export default function ChartsPanel({ data, dataLoading, narrativePrompt, selectedRange, onRangeChange, style }) {
+// Maps section key → promptSettings key
+const SECTION_PROMPT_KEY = {
+  dayAhead:          'narrativeDayAhead',
+  balancing:         'narrativeBalancing',
+  ancillaryServices: 'narrativeAncillaryServices',
+}
+
+const SECTIONS = Object.keys(SECTION_PROMPT_KEY)
+
+function makePerSection(value) {
+  return Object.fromEntries(SECTIONS.map(s => [s, value]))
+}
+
+export default function ChartsPanel({ data, dataLoading, narrativePrompts, selectedRange, onRangeChange, style }) {
   const { dayAhead, imbalance, afrr, errors } = data
 
-  const [narrative, setNarrative]           = useState(undefined)
-  const [loading, setLoading]               = useState(false)
-  const [lastGenerated, setLastGenerated]   = useState(null)
-  const [generatedDates, setGeneratedDates] = useState(null)
+  // ── Per-section narrative state ───────────────────────────────────────────
+  const [narratives,      setNarratives]      = useState(makePerSection(undefined))
+  const [loadings,        setLoadings]        = useState(makePerSection(false))
+  const [lastGeneratedMap, setLastGeneratedMap] = useState(makePerSection(null))
+  const [generatedDatesMap, setGeneratedDatesMap] = useState(makePerSection(null))
+
+  // ── Compare period ────────────────────────────────────────────────────────
   const [compareEnabled, setCompareEnabled] = useState(false)
-  const [compareData, setCompareData]       = useState(null)
+  const [compareData,    setCompareData]    = useState(null)
   const [compareLoading, setCompareLoading] = useState(false)
 
   const dates        = computeDates(selectedRange)
@@ -29,26 +45,35 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompt, select
     })
   }, [compareEnabled, selectedRange])
 
-  const isStale = generatedDates && (
-    generatedDates.startDate !== dates.startDate ||
-    generatedDates.endDate   !== dates.endDate
-  )
-
-  async function handleGenerate() {
-    setLoading(true)
-    const datesSnapshot  = { ...computeDates(selectedRange) }
-    const forceRefresh   = narrative !== undefined  // true when Regenerate, false on first Generate
+  // ── Per-section generate handler ──────────────────────────────────────────
+  async function handleGenerateSection(section) {
+    setLoadings(prev => ({ ...prev, [section]: true }))
+    const datesSnapshot = { ...computeDates(selectedRange) }
+    const forceRefresh  = narratives[section] !== undefined  // Regenerate on second click
+    const systemPrompt  = narrativePrompts[SECTION_PROMPT_KEY[section]]
     try {
-      const summary = buildNarrativePayload(data, datesSnapshot.startDate, datesSnapshot.endDate)
-      const result  = await fetchNarrative(summary, narrativePrompt, datesSnapshot.startDate, datesSnapshot.endDate, forceRefresh)
+      const fullPayload = buildNarrativePayload(data, datesSnapshot.startDate, datesSnapshot.endDate)
+      const result = await fetchSectionNarrative(
+        section, fullPayload, systemPrompt,
+        datesSnapshot.startDate, datesSnapshot.endDate,
+        forceRefresh
+      )
       if (result.ok) {
-        setNarrative(result.narrative)
-        setGeneratedDates(datesSnapshot)
-        if (!result.fromCache) setLastGenerated(new Date().toLocaleTimeString())
+        setNarratives(prev => ({ ...prev, [section]: result.narrative }))
+        setGeneratedDatesMap(prev => ({ ...prev, [section]: datesSnapshot }))
+        if (!result.fromCache) {
+          setLastGeneratedMap(prev => ({ ...prev, [section]: new Date().toLocaleTimeString() }))
+        }
       }
     } finally {
-      setLoading(false)
+      setLoadings(prev => ({ ...prev, [section]: false }))
     }
+  }
+
+  // ── Stale check per section ───────────────────────────────────────────────
+  function isSectionStale(section) {
+    const gd = generatedDatesMap[section]
+    return gd && (gd.startDate !== dates.startDate || gd.endDate !== dates.endDate)
   }
 
   return (
@@ -89,27 +114,33 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompt, select
           <DayAheadSection
             dayAhead={dayAhead} errors={errors}
             startDate={dates.startDate} endDate={dates.endDate}
-            narrative={narrative?.dayAhead} loading={loading}
-            onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
-            lastGenerated={lastGenerated}
+            narrative={narratives.dayAhead} loading={loadings.dayAhead}
+            onGenerate={() => handleGenerateSection('dayAhead')}
+            isStale={isSectionStale('dayAhead')}
+            generatedDates={generatedDatesMap.dayAhead}
+            lastGenerated={lastGeneratedMap.dayAhead}
             dataLoading={dataLoading?.dayAhead}
             {...cmp}
           />
           <BalancingSection
             imbalance={imbalance} errors={errors}
             startDate={dates.startDate} endDate={dates.endDate}
-            narrative={narrative?.balancing} loading={loading}
-            onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
-            lastGenerated={lastGenerated}
+            narrative={narratives.balancing} loading={loadings.balancing}
+            onGenerate={() => handleGenerateSection('balancing')}
+            isStale={isSectionStale('balancing')}
+            generatedDates={generatedDatesMap.balancing}
+            lastGenerated={lastGeneratedMap.balancing}
             dataLoading={dataLoading?.imbalance}
             {...cmp}
           />
           <AncillaryServicesSection
             afrr={afrr} errors={errors}
             startDate={dates.startDate} endDate={dates.endDate}
-            narrative={narrative?.ancillaryServices} loading={loading}
-            onGenerate={handleGenerate} isStale={isStale} generatedDates={generatedDates}
-            lastGenerated={lastGenerated}
+            narrative={narratives.ancillaryServices} loading={loadings.ancillaryServices}
+            onGenerate={() => handleGenerateSection('ancillaryServices')}
+            isStale={isSectionStale('ancillaryServices')}
+            generatedDates={generatedDatesMap.ancillaryServices}
+            lastGenerated={lastGeneratedMap.ancillaryServices}
             dataLoading={dataLoading?.afrr}
             {...cmp}
           />
