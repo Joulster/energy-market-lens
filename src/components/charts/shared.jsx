@@ -1,4 +1,42 @@
+import { useState } from 'react'
+
 export const legendStyle = { fontSize: 12, color: '#94a3b8', paddingTop: 4 }
+
+// Hook: per-chart legend toggle. Call once per chart, use returned helpers on
+// each <Line>/<Bar> and the <Legend> element.
+// Keyed by series `name` (the display label) so it works even when dataKey is
+// a function (e.g. HLA range bars).
+export function useLegendToggle() {
+  const [hidden, setHidden] = useState(new Set())
+
+  const toggle = (data) => {
+    const key = data.value          // Recharts passes display name as data.value
+    setHidden(prev => {
+      const next = new Set(prev)
+      next.has(key) ? next.delete(key) : next.add(key)
+      return next
+    })
+  }
+
+  // Use on each <Line>/<Bar>: hide={lgd.isHidden('Series Name')}
+  const isHidden = (name) => hidden.has(name)
+
+  // Pass as formatter prop on <Legend>
+  const formatter = (value) => (
+    <span style={{ opacity: hidden.has(value) ? 0.35 : 1, cursor: 'pointer' }}>
+      {value}
+    </span>
+  )
+
+  // Spread onto <Legend>: <Legend {...lgd.legendProps} />
+  const legendProps = {
+    onClick:      toggle,
+    formatter,
+    wrapperStyle: { ...legendStyle, cursor: 'pointer' },
+  }
+
+  return { isHidden, legendProps }
+}
 
 export const COLORS = {
   blue: '#60a5fa',

@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ReferenceArea,
   ResponsiveContainer,
 } from 'recharts'
-import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip } from './shared.jsx'
+import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip, useLegendToggle } from './shared.jsx'
 import { useZoom } from './useZoom.js'
 
 // Format a UTC ISO string as a short CET date+time label
@@ -222,6 +222,9 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, last
 export default function DayAheadSection({ dayAhead, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, lastGenerated, dataLoading, compareEnabled, compareData, compareDates }) {
   const [resolution, setResolution] = useState('15m')
 
+  const lgd0 = useLegendToggle()   // Day-Ahead price chart
+  const lgd1 = useLegendToggle()   // Negative hours chart
+
   const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
   const inPrevRange = d => (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate)
 
@@ -310,9 +313,9 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
               <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={hlaDomain} tickFormatter={v => Number(v).toFixed(2)} />
               <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
               <Tooltip content={<HLATooltip resolution={resolution} />} />
-              {compareEnabled && <Legend wrapperStyle={legendStyle} />}
-              <Bar dataKey={d => [d.low, d.high]} shape={<HLABar />} isAnimationActive={false} name="DA Price H/L/Avg" />
-              {compareEnabled && <Line type="monotone" dataKey="prevAvg" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Previous period avg" isAnimationActive={false} />}
+              <Legend {...lgd0.legendProps} />
+              <Bar dataKey={d => [d.low, d.high]} shape={<HLABar />} isAnimationActive={false} name="DA Price H/L/Avg" hide={lgd0.isHidden('DA Price H/L/Avg')} />
+              {compareEnabled && <Line type="monotone" dataKey="prevAvg" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Previous period avg" hide={lgd0.isHidden('Previous period avg')} isAnimationActive={false} />}
               {zoom0.refArea.left && zoom0.refArea.right && (
                 <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
               )}
@@ -324,9 +327,9 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
               <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={['auto', 'auto']} tickFormatter={v => Number(v).toFixed(2)} />
               <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
               <Tooltip content={<RawPriceTooltip resolution={resolution} />} />
-              {compareEnabled && <Legend wrapperStyle={legendStyle} />}
-              <Line type="monotone" dataKey="price" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} name="DA Price (EUR/MWh)" isAnimationActive={false} />
-              {compareEnabled && <Line type="monotone" dataKey="prevPrice" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" isAnimationActive={false} />}
+              <Legend {...lgd0.legendProps} />
+              <Line type="monotone" dataKey="price" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} name="DA Price (EUR/MWh)" hide={lgd0.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
+              {compareEnabled && <Line type="monotone" dataKey="prevPrice" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd0.isHidden('Prev. period')} isAnimationActive={false} />}
               {zoom0.refArea.left && zoom0.refArea.right && (
                 <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
               )}
@@ -342,9 +345,9 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
             <XAxis dataKey="week" tickFormatter={fmtWeek} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={35} allowDecimals={false} />
             <Tooltip content={<CompareTooltip />} labelFormatter={fmtWeek} />
-            <Legend wrapperStyle={legendStyle} />
-            <Bar dataKey="count" fill={COLORS.orange} name="Hours with negative DA price" radius={[2, 2, 0, 0]} />
-            {compareEnabled && <Bar dataKey="prevCount" fill={COLORS.orange} fillOpacity={0.35} name="Prev. period" radius={[2, 2, 0, 0]} />}
+            <Legend {...lgd1.legendProps} />
+            <Bar dataKey="count" fill={COLORS.orange} name="Hours with negative DA price" hide={lgd1.isHidden('Hours with negative DA price')} radius={[2, 2, 0, 0]} />
+            {compareEnabled && <Bar dataKey="prevCount" fill={COLORS.orange} fillOpacity={0.35} name="Prev. period" hide={lgd1.isHidden('Prev. period')} radius={[2, 2, 0, 0]} />}
             {zoom1.refArea.left && zoom1.refArea.right && (
               <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}

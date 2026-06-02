@@ -3,7 +3,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceArea,
   ResponsiveContainer,
 } from 'recharts'
-import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip } from './shared.jsx'
+import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip, useLegendToggle } from './shared.jsx'
 import { useZoom } from './useZoom.js'
 
 function buildWeeklyStdDev(imbalanceDaily) {
@@ -85,6 +85,9 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
   const mergedImbalance  = imbalanceData.map((d, i)  => ({ ...d, prevMidPrice: prevImbalance[i]?.midPrice }))
   const mergedStdDev     = weeklyStdDev.map((d, i)   => ({ ...d, prevStdDev:   prevWeeklyStdDev[i]?.stdDev }))
 
+  const lgd0 = useLegendToggle()   // imbalance midprice chart
+  const lgd1 = useLegendToggle()   // std dev chart
+
   const zoom0 = useZoom(mergedImbalance, 'date')
   const zoom1 = useZoom(mergedStdDev, 'week')
 
@@ -99,9 +102,9 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
             <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
-            <Legend wrapperStyle={legendStyle} />
-            <Line type="monotone" dataKey="midPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="Imbalance Mid Price (EUR/MWh)" />
-            {compareEnabled && <Line type="monotone" dataKey="prevMidPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" />}
+            <Legend {...lgd0.legendProps} />
+            <Line type="monotone" dataKey="midPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="Imbalance Mid Price (EUR/MWh)" hide={lgd0.isHidden('Imbalance Mid Price (EUR/MWh)')} />
+            {compareEnabled && <Line type="monotone" dataKey="prevMidPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd0.isHidden('Prev. period')} />}
             {zoom0.refArea.left && zoom0.refArea.right && (
               <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
@@ -116,9 +119,9 @@ export default function BalancingSection({ imbalance, errors, startDate, endDate
             <XAxis dataKey="week" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
-            <Legend wrapperStyle={legendStyle} />
-            <Bar dataKey="stdDev" fill={COLORS.purple} name="Weekly std dev of imbalance price (EUR/MWh)" radius={[2, 2, 0, 0]} />
-            {compareEnabled && <Bar dataKey="prevStdDev" fill={COLORS.purple} fillOpacity={0.35} name="Prev. period" radius={[2, 2, 0, 0]} />}
+            <Legend {...lgd1.legendProps} />
+            <Bar dataKey="stdDev" fill={COLORS.purple} name="Weekly std dev of imbalance price (EUR/MWh)" hide={lgd1.isHidden('Weekly std dev of imbalance price (EUR/MWh)')} radius={[2, 2, 0, 0]} />
+            {compareEnabled && <Bar dataKey="prevStdDev" fill={COLORS.purple} fillOpacity={0.35} name="Prev. period" hide={lgd1.isHidden('Prev. period')} radius={[2, 2, 0, 0]} />}
             {zoom1.refArea.left && zoom1.refArea.right && (
               <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}

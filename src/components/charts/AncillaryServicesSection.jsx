@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer,
 } from 'recharts'
-import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip } from './shared.jsx'
+import { COLORS, chartProps, legendStyle, fmtDate, ChartWrap, CompareTooltip, useLegendToggle } from './shared.jsx'
 import { useZoom } from './useZoom.js'
 
 // ── Timestamp formatters ────────────────────────────────────────────────────
@@ -175,6 +175,10 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
   const [afrrCapRes,  setAfrrCapRes]  = useState('4h')
   const [fcrRes,      setFcrRes]      = useState('4h')
 
+  const lgd0 = useLegendToggle()   // aFRR capacity chart
+  const lgd1 = useLegendToggle()   // FCR chart
+  const lgd2 = useLegendToggle()   // energy chart
+
   const inRangeTs  = ts => { const d = ts?.slice(0, 10); return (!startDate || d >= startDate) && (!endDate || d <= endDate) }
   const inPrevTs   = ts => { const d = ts?.slice(0, 10); return (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate) }
 
@@ -267,13 +271,13 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
             {/* Price EUR/MW/h — inner left axis */}
             <YAxis yAxisId="price" orientation="left" width={45} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
-            <Legend wrapperStyle={legendStyle} />
-            <Bar yAxisId="cap" dataKey="afrrCapacityUpMW"   fill={COLORS.green} fillOpacity={0.18} name="Up Capacity (MW)"   isAnimationActive={false} />
-            <Bar yAxisId="cap" dataKey="afrrCapacityDownMW" fill={COLORS.amber} fillOpacity={0.18} name="Down Capacity (MW)" isAnimationActive={false} />
-            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Up Price (EUR/MW/h)"   isAnimationActive={false} />
-            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Down Price (EUR/MW/h)" isAnimationActive={false} />
-            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up"   isAnimationActive={false} />}
-            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" isAnimationActive={false} />}
+            <Legend {...lgd0.legendProps} />
+            <Bar yAxisId="cap" dataKey="afrrCapacityUpMW"   fill={COLORS.green} fillOpacity={0.18} name="Up Capacity (MW)"   hide={lgd0.isHidden('Up Capacity (MW)')}   isAnimationActive={false} />
+            <Bar yAxisId="cap" dataKey="afrrCapacityDownMW" fill={COLORS.amber} fillOpacity={0.18} name="Down Capacity (MW)" hide={lgd0.isHidden('Down Capacity (MW)')} isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Up Price (EUR/MW/h)"   hide={lgd0.isHidden('aFRR Up Price (EUR/MW/h)')}   isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Down Price (EUR/MW/h)" hide={lgd0.isHidden('aFRR Down Price (EUR/MW/h)')} isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up"   hide={lgd0.isHidden('Prev. Up')}   isAnimationActive={false} />}
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" hide={lgd0.isHidden('Prev. Down')} isAnimationActive={false} />}
             {zoom0.refArea.left && zoom0.refArea.right && (
               <ReferenceArea yAxisId="price" x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
@@ -291,10 +295,10 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
             {/* Price EUR/MW/h — inner left axis */}
             <YAxis yAxisId="price" orientation="left" width={45} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
-            <Legend wrapperStyle={legendStyle} />
-            <Bar  yAxisId="cap"   dataKey="capacityMW" fill={COLORS.purple} fillOpacity={0.18} name="FCR Capacity (MW)"           isAnimationActive={false} />
-            <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={COLORS.purple} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" isAnimationActive={false} />
-            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevPrice" stroke={COLORS.purple} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" isAnimationActive={false} />}
+            <Legend {...lgd1.legendProps} />
+            <Bar  yAxisId="cap"   dataKey="capacityMW" fill={COLORS.purple} fillOpacity={0.18} name="FCR Capacity (MW)"           hide={lgd1.isHidden('FCR Capacity (MW)')}           isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={COLORS.purple} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" hide={lgd1.isHidden('FCR Clearing Price (EUR/MW/h)')} isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevPrice" stroke={COLORS.purple} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd1.isHidden('Prev. period')} isAnimationActive={false} />}
             {zoom1.refArea.left && zoom1.refArea.right && (
               <ReferenceArea yAxisId="price" x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
@@ -309,11 +313,11 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
             <XAxis dataKey="timestamp" tickFormatter={v => fmtEnergyTs(v, energyRes)} tick={{ fill: '#94a3b8', fontSize: energyRes === '1d' ? 11 : 10 }} minTickGap={60} />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip labelFormatter={v => fmtEnergyTs(v, energyRes)} />} />
-            <Legend wrapperStyle={legendStyle} />
-            <Line type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)" isAnimationActive={false} />
-            <Line type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" isAnimationActive={false} />
-            {compareEnabled && <Line type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" isAnimationActive={false} />}
-            {compareEnabled && <Line type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" isAnimationActive={false} />}
+            <Legend {...lgd2.legendProps} />
+            <Line type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)"   hide={lgd2.isHidden('aFRR Up Energy (EUR/MWh)')}   isAnimationActive={false} />
+            <Line type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" hide={lgd2.isHidden('aFRR Down Energy (EUR/MWh)')} isAnimationActive={false} />
+            {compareEnabled && <Line type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up"   hide={lgd2.isHidden('Prev. Up')}   isAnimationActive={false} />}
+            {compareEnabled && <Line type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" hide={lgd2.isHidden('Prev. Down')} isAnimationActive={false} />}
             {zoom2.refArea.left && zoom2.refArea.right && (
               <ReferenceArea x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
