@@ -86,7 +86,7 @@ app.get('/api/afrr', async (req, res) => {
       })),
       fcrHourly,
     }
-  }, 'v5|')
+  }, 'v6|')
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours

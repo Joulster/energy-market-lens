@@ -475,70 +475,85 @@ function parseCapacityTimeSeries(xml) {
   return points
 }
 
+// Split [startIso, endIso] (YYYY-MM-DD) into chunks of at most maxDays.
+function dateChunks(startIso, endIso, maxDays) {
+  const chunks = []
+  let cur = new Date(startIso + 'T00:00:00Z')
+  const end = new Date(endIso + 'T00:00:00Z')
+  while (cur <= end) {
+    const chunkEnd = new Date(Math.min(
+      cur.getTime() + (maxDays - 1) * 86_400_000,
+      end.getTime()
+    ))
+    chunks.push({
+      ps: toEntsoeDate(cur.toISOString().slice(0, 10)),
+      pe: toEntsoeDate(chunkEnd.toISOString().slice(0, 10), 1),
+    })
+    cur = new Date(chunkEnd.getTime() + 86_400_000)
+  }
+  return chunks
+}
+
 // Fetch aFRR and FCR capacity procurement prices from ENTSO-E.
 // Document type A81 (Contracted reserves), businessType B95 (Procured capacity).
 // Process types: A51 = aFRR, A52 = FCR (per ENTSO-E balancing document mapping).
 // Agreement type A01 = Daily (D-1 procurement used by TenneT NL).
 // Response is a ZIP file containing XML — requires binary fetch + decompress.
+// ENTSO-E limits to 100 instances per request:
+//   aFRR = 2 series/day (up + down) → chunk at 45 days
+//   FCR  = 6 series/day (4-h blocks) → chunk at 14 days
 //
 // Returns:
-//   afrrCapacityUp   { [cetDate]: price }  — A01 (up-regulation)
-//   afrrCapacityDown { [cetDate]: price }  — A02 (down-regulation)
+//   afrrCapacityUp   { [cetDate]: price }   — A01 (up-regulation)
+//   afrrCapacityDown { [cetDate]: price }   — A02 (down-regulation)
 //   fcrHourly        [{ timestamp, price }] — A03 symmetric, one entry per 4-h block (CET)
 export async function fetchCapacityPrices(startDate, endDate) {
-  const ps = startDate ? toEntsoeDate(startDate) : periodStart()
-  const pe = endDate   ? toEntsoeDate(endDate, 1) : periodEnd()
+  const sd = startDate ?? new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
+  const ed = endDate   ?? new Date().toISOString().slice(0, 10)
 
   const base = {
     documentType: 'A81',
     businessType: 'B95',
     controlArea_Domain: BIDDING_ZONE,
     'type_MarketAgreement.Type': 'A01',
-    periodStart: ps,
-    periodEnd: pe,
   }
 
-  const [afrrRes, fcrRes] = await Promise.allSettled([
-    entsoeRequestBinary({ ...base, processType: 'A51' }),
-    entsoeRequestBinary({ ...base, processType: 'A52' }),
-  ])
+  // Fetch all chunks for a given processType and collect raw points
+  async function fetchAllChunks(processType, maxDays) {
+    const allPoints = []
+    for (const { ps, pe } of dateChunks(sd, ed, maxDays)) {
+      try {
+        const buf = await entsoeRequestBinary({ ...base, processType, periodStart: ps, periodEnd: pe })
+        allPoints.push(...parseCapacityTimeSeries(unzipXml(buf)))
+      } catch (e) {
+        console.warn(`ENTSO-E A81 ${processType} chunk ${ps}–${pe} failed:`, e.message)
+      }
+    }
+    return allPoints
+  }
 
-  if (afrrRes.status === 'rejected') console.warn('ENTSO-E aFRR capacity fetch failed:', afrrRes.reason?.message)
-  if (fcrRes.status  === 'rejected') console.warn('ENTSO-E FCR capacity fetch failed:',  fcrRes.reason?.message)
+  const [afrrPoints, fcrPoints] = await Promise.all([
+    fetchAllChunks('A51', 45),  // 2 series/day → safe up to 45 days
+    fetchAllChunks('A52', 14),  // 6 series/day → safe up to 14 days
+  ])
 
   // ── aFRR: one price per CET day, two directions ──────────────────────────
   const afrrCapacityUp   = {}
   const afrrCapacityDown = {}
-  if (afrrRes.status === 'fulfilled') {
-    try {
-      const points = parseCapacityTimeSeries(unzipXml(afrrRes.value))
-      for (const { ts, value, direction } of points) {
-        const date = cetDate(ts)
-        if (direction === 'A01') afrrCapacityUp[date]   = value   // up-regulation
-        if (direction === 'A02') afrrCapacityDown[date] = value   // down-regulation
-      }
-    } catch (e) { console.warn('ENTSO-E aFRR capacity parse error:', e.message) }
+  for (const { ts, value, direction } of afrrPoints) {
+    const date = cetDate(ts)
+    if (direction === 'A01') afrrCapacityUp[date]   = value
+    if (direction === 'A02') afrrCapacityDown[date] = value
   }
 
   // ── FCR: 4-hour blocks, symmetric (A03) ─────────────────────────────────
+  const seen = new Set()
   const fcrHourly = []
-  if (fcrRes.status === 'fulfilled') {
-    try {
-      const points = parseCapacityTimeSeries(unzipXml(fcrRes.value))
-      // Each 4-hour block has exactly one Point; bucket by CET hour to deduplicate
-      const seen = new Set()
-      for (const { ts, value } of points) {
-        const date = cetDate(ts)
-        const hour = cetHour(ts)
-        const key = `${date}T${String(hour).padStart(2, '0')}:00`
-        if (!seen.has(key)) {
-          fcrHourly.push({ timestamp: key, price: value })
-          seen.add(key)
-        }
-      }
-      fcrHourly.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    } catch (e) { console.warn('ENTSO-E FCR capacity parse error:', e.message) }
+  for (const { ts, value } of fcrPoints) {
+    const key = `${cetDate(ts)}T${String(cetHour(ts)).padStart(2, '0')}:00`
+    if (!seen.has(key)) { fcrHourly.push({ timestamp: key, price: value }); seen.add(key) }
   }
+  fcrHourly.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
   return { afrrCapacityUp, afrrCapacityDown, fcrHourly }
 }
