@@ -169,6 +169,58 @@ export function buildNarrativePayload(data, startDate, endDate) {
     ? arbitrageWindows.reduce((best, w) => w.spread > best.spread ? w : best)
     : null
 
+  // ── Balancing: imbalance midprice summary ──────────────────────────────────
+  const imbalanceSlice = (imbalance?.daily ?? []).filter(d => d.date >= cutoffStr && d.midPrice != null)
+  const balancingPayload = imbalanceSlice.length ? (() => {
+    const prices = imbalanceSlice.map(d => d.midPrice)
+    const avg    = +(prices.reduce((s, v) => s + v, 0) / prices.length).toFixed(2)
+    const high   = +Math.max(...prices).toFixed(2)
+    const low    = +Math.min(...prices).toFixed(2)
+    return {
+      avgMidPriceEurMwh:  avg,
+      highMidPriceEurMwh: high,
+      lowMidPriceEurMwh:  low,
+      rangeEurMwh:        +(high - low).toFixed(2),
+      daily: imbalanceSlice.map(d => ({ date: d.date, midPrice: +d.midPrice.toFixed(2) })),
+    }
+  })() : null
+
+  // ── Ancillary services: aFRR + FCR summary ────────────────────────────────
+  const colAvg = (arr, key) => {
+    const vals = arr.map(d => d[key]).filter(v => v != null)
+    return vals.length ? +(vals.reduce((s, v) => s + v, 0) / vals.length).toFixed(2) : null
+  }
+
+  const afrrEnergySlice = (afrr?.afrrEnergyRaw ?? []).filter(d => {
+    const date = d.timestamp?.slice(0, 10)
+    return date && date >= cutoffStr && date <= todayStr
+  })
+  const afrrCapSlice = (afrr?.afrrHourly ?? []).filter(d => {
+    const date = d.timestamp?.slice(0, 10)
+    return date && date >= cutoffStr && date <= todayStr
+  })
+  const fcrSlice = (afrr?.fcrHourly ?? []).filter(d => {
+    const date = d.timestamp?.slice(0, 10)
+    return date && date >= cutoffStr && date <= todayStr
+  })
+
+  const ancillaryPayload = (afrrEnergySlice.length || afrrCapSlice.length || fcrSlice.length) ? {
+    afrrEnergy: afrrEnergySlice.length ? {
+      avgUpEurMwh:   colAvg(afrrEnergySlice, 'afrrUpEnergyPrice'),
+      avgDownEurMwh: colAvg(afrrEnergySlice, 'afrrDownEnergyPrice'),
+    } : null,
+    afrrCapacity: afrrCapSlice.length ? {
+      avgUpPriceEurMwPerH:   colAvg(afrrCapSlice, 'afrrCapacityUpPrice'),
+      avgDownPriceEurMwPerH: colAvg(afrrCapSlice, 'afrrCapacityDownPrice'),
+      avgUpMW:               colAvg(afrrCapSlice, 'afrrCapacityUpMW'),
+      avgDownMW:             colAvg(afrrCapSlice, 'afrrCapacityDownMW'),
+    } : null,
+    fcr: fcrSlice.length ? {
+      avgPriceEurMwPerH: colAvg(fcrSlice, 'price'),
+      avgCapacityMW:     colAvg(fcrSlice, 'capacityMW'),
+    } : null,
+  } : null
+
   return {
     period: { from: cutoffStr, to: todayStr },
     dayAheadPrice: {
@@ -183,5 +235,7 @@ export function buildNarrativePayload(data, startDate, endDate) {
       bestArbitrageWindow,
     },
     negativeHoursPerWeek: negHoursSlice.map(d => ({ week: d.week, count: d.count })),
+    balancing:         balancingPayload,
+    ancillaryServices: ancillaryPayload,
   }
 }
