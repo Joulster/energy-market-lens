@@ -20,10 +20,56 @@ function fmtEnergyTs(v, resolution) {
 }
 
 // ENTSO-E capacity timestamps are CET: "2026-01-01T00:00"
-function fmtCapacityTs(v) {
+function fmtCapacityTs(v, resolution) {
   if (!v) return ''
+  if (resolution === '1d') return fmtDate(v.slice(0, 10))
   const [date, time] = v.split('T')
   return `${fmtDate(date)} ${time}`
+}
+
+// ── Capacity resolution aggregation (aFRR + FCR) ────────────────────────────
+
+const CAPACITY_RESOLUTIONS = [
+  { key: '4h', label: '4h' },
+  { key: '1d', label: '1d' },
+]
+
+function aggregateAfrrCap1d(points) {
+  const buckets = {}
+  for (const pt of points) {
+    const date = pt.timestamp.slice(0, 10)
+    if (!buckets[date]) buckets[date] = { up: [], down: [], upMW: [], downMW: [] }
+    if (pt.afrrCapacityUpPrice   != null) buckets[date].up.push(pt.afrrCapacityUpPrice)
+    if (pt.afrrCapacityDownPrice != null) buckets[date].down.push(pt.afrrCapacityDownPrice)
+    if (pt.afrrCapacityUpMW      != null) buckets[date].upMW.push(pt.afrrCapacityUpMW)
+    if (pt.afrrCapacityDownMW    != null) buckets[date].downMW.push(pt.afrrCapacityDownMW)
+  }
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, b]) => ({
+      timestamp:             date,
+      afrrCapacityUpPrice:   avg(b.up),
+      afrrCapacityDownPrice: avg(b.down),
+      afrrCapacityUpMW:      avg(b.upMW),
+      afrrCapacityDownMW:    avg(b.downMW),
+    }))
+}
+
+function aggregateFcr1d(points) {
+  const buckets = {}
+  for (const pt of points) {
+    const date = pt.timestamp.slice(0, 10)
+    if (!buckets[date]) buckets[date] = { prices: [], mws: [] }
+    if (pt.price      != null) buckets[date].prices.push(pt.price)
+    if (pt.capacityMW != null) buckets[date].mws.push(pt.capacityMW)
+  }
+  return Object.entries(buckets)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, b]) => ({
+      timestamp:  date,
+      price:      avg(b.prices),
+      capacityMW: avg(b.mws),
+    }))
 }
 
 // ── aFRR energy aggregation ─────────────────────────────────────────────────
@@ -125,26 +171,32 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, last
 // ── Section ─────────────────────────────────────────────────────────────────
 
 export default function AncillaryServicesSection({ afrr, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, lastGenerated, dataLoading, compareEnabled, compareData, compareDates }) {
-  const [energyRes, setEnergyRes] = useState('1h')
+  const [energyRes,   setEnergyRes]   = useState('1h')
+  const [afrrCapRes,  setAfrrCapRes]  = useState('4h')
+  const [fcrRes,      setFcrRes]      = useState('4h')
 
   const inRangeTs  = ts => { const d = ts?.slice(0, 10); return (!startDate || d >= startDate) && (!endDate || d <= endDate) }
   const inPrevTs   = ts => { const d = ts?.slice(0, 10); return (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate) }
 
-  // ── Capacity (ENTSO-E 4-h blocks) ─────────────────────────────────────────
-  const afrrCapacity     = (afrr?.afrrHourly     ?? []).filter(d => inRangeTs(d.timestamp))
-  const prevAfrrCapacity = compareEnabled ? (compareData?.afrr?.afrrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
-  const mergedAfrrCapacity = afrrCapacity.map((d, i) => ({
+  // ── aFRR Capacity (ENTSO-E, aggregated by resolution) ─────────────────────
+  const rawAfrrCap     = (afrr?.afrrHourly     ?? []).filter(d => inRangeTs(d.timestamp))
+  const prevRawAfrrCap = compareEnabled ? (compareData?.afrr?.afrrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
+  const afrrCapData     = afrrCapRes === '1d' ? aggregateAfrrCap1d(rawAfrrCap)     : rawAfrrCap
+  const prevAfrrCapData = afrrCapRes === '1d' ? aggregateAfrrCap1d(prevRawAfrrCap) : prevRawAfrrCap
+  const mergedAfrrCapacity = afrrCapData.map((d, i) => ({
     ...d,
-    prevAfrrCapacityUpPrice:   prevAfrrCapacity[i]?.afrrCapacityUpPrice,
-    prevAfrrCapacityDownPrice: prevAfrrCapacity[i]?.afrrCapacityDownPrice,
+    prevAfrrCapacityUpPrice:   prevAfrrCapData[i]?.afrrCapacityUpPrice,
+    prevAfrrCapacityDownPrice: prevAfrrCapData[i]?.afrrCapacityDownPrice,
   }))
 
-  // ── FCR (ENTSO-E 4-h blocks) ───────────────────────────────────────────────
-  const fcrHourly     = (afrr?.fcrHourly  ?? []).filter(d => inRangeTs(d.timestamp))
-  const prevFcrHourly = compareEnabled ? (compareData?.afrr?.fcrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
-  const mergedFcr = fcrHourly.map((d, i) => ({
+  // ── FCR (ENTSO-E, aggregated by resolution) ────────────────────────────────
+  const rawFcr     = (afrr?.fcrHourly  ?? []).filter(d => inRangeTs(d.timestamp))
+  const prevRawFcr = compareEnabled ? (compareData?.afrr?.fcrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
+  const fcrData     = fcrRes === '1d' ? aggregateFcr1d(rawFcr)     : rawFcr
+  const prevFcrData = fcrRes === '1d' ? aggregateFcr1d(prevRawFcr) : prevRawFcr
+  const mergedFcr = fcrData.map((d, i) => ({
     ...d,
-    prevPrice: prevFcrHourly[i]?.price ?? null,
+    prevPrice: prevFcrData[i]?.price ?? null,
   }))
 
   // ── Energy (TenneT 15-min, aggregated by selected resolution) ─────────────
@@ -165,6 +217,28 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
   const zoom1 = useZoom(mergedFcr,          'timestamp')
   const zoom2 = useZoom(mergedEnergy,       'timestamp')
 
+  const afrrCapControls = (
+    <div className="range-selector chart-resolution-selector">
+      {CAPACITY_RESOLUTIONS.map(r => (
+        <button key={r.key} className={`range-option${afrrCapRes === r.key ? ' active' : ''}`}
+          onClick={() => { setAfrrCapRes(r.key); zoom0.reset() }}>
+          {r.label}
+        </button>
+      ))}
+    </div>
+  )
+
+  const fcrControls = (
+    <div className="range-selector chart-resolution-selector">
+      {CAPACITY_RESOLUTIONS.map(r => (
+        <button key={r.key} className={`range-option${fcrRes === r.key ? ' active' : ''}`}
+          onClick={() => { setFcrRes(r.key); zoom1.reset() }}>
+          {r.label}
+        </button>
+      ))}
+    </div>
+  )
+
   const energyResControls = (
     <div className="range-selector chart-resolution-selector">
       {ENERGY_RESOLUTIONS.map(r => (
@@ -183,11 +257,11 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
     <section className="asset-section">
       <h2 className="section-title">Ancillary Services</h2>
 
-      <ChartWrap title="aFRR Capacity Price NL (EUR/MW/h)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
+      <ChartWrap title="aFRR Capacity NL — Price & Volume" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} controls={afrrCapControls} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <ComposedChart data={zoom0.displayData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={fmtCapacityTs} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtCapacityTs(v, afrrCapRes)} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
             {/* Capacity MW — outer left axis */}
             <YAxis yAxisId="cap"   orientation="left" width={42} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}MW`} />
             {/* Price EUR/MW/h — inner left axis */}
@@ -207,11 +281,11 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         </ResponsiveContainer>
       </ChartWrap>
 
-      <ChartWrap title="FCR Clearing Price NL (EUR/MW/h)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
+      <ChartWrap title="FCR Capacity NL — Price & Volume" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} controls={fcrControls} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <ComposedChart data={zoom1.displayData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={fmtCapacityTs} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtCapacityTs(v, fcrRes)} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
             {/* Capacity MW — outer left axis */}
             <YAxis yAxisId="cap"   orientation="left" width={42} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}MW`} />
             {/* Price EUR/MW/h — inner left axis */}
