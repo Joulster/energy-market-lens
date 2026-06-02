@@ -69,24 +69,20 @@ app.get('/api/afrr', async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:afrr', startDate, endDate, async () => {
     // TenneT: energy prices (dispatch_up / dispatch_down from settlement-prices)
-    // ENTSO-E: capacity prices (A81/B95, A51=aFRR, A52=FCR)
+    // ENTSO-E: capacity prices (A81/B95, A51=aFRR A13, A52=FCR A01) — 4-h blocks
     const [tennet, entsoe] = await Promise.all([
       fetchAFRRData(startDate, endDate),
       fetchCapacityPrices(startDate, endDate).catch(err => {
         console.warn('ENTSO-E capacity prices fetch failed:', err.message)
-        return { afrrCapacityByDay: {}, fcrByDay: {} }
+        return { afrrHourly: [], fcrHourly: [] }
       }),
     ])
-    const { afrrCapacityUp, afrrCapacityDown, fcrHourly } = entsoe
     return {
-      daily: tennet.daily.map(d => ({
-        ...d,
-        afrrCapacityUpPrice:   afrrCapacityUp[d.date]   ?? null,
-        afrrCapacityDownPrice: afrrCapacityDown[d.date] ?? null,
-      })),
-      fcrHourly,
+      daily:      tennet.daily,        // TenneT energy prices (afrrUpEnergyPrice / afrrDownEnergyPrice)
+      afrrHourly: entsoe.afrrHourly,   // ENTSO-E 4-h block capacity prices (Up + Down)
+      fcrHourly:  entsoe.fcrHourly,    // ENTSO-E 4-h block FCR clearing price (symmetric)
     }
-  }, 'v7|')
+  }, 'v8|')
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours

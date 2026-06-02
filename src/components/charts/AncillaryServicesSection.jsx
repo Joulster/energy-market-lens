@@ -54,35 +54,37 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
   const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
   const inPrevRange = d => (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate)
 
-  const afrrData   = (afrr?.daily    ?? []).filter(d => inRange(d.date))
-  const fcrHourly  = (afrr?.fcrHourly ?? []).filter(d => {
-    const date = d.timestamp?.slice(0, 10)
-    return (!startDate || date >= startDate) && (!endDate || date <= endDate)
-  })
+  const inRangeTs  = ts => { const date = ts?.slice(0, 10); return (!startDate || date >= startDate) && (!endDate || date <= endDate) }
+  const inPrevTs   = ts => { const date = ts?.slice(0, 10); return (!compareDates?.startDate || date >= compareDates.startDate) && (!compareDates?.endDate || date <= compareDates.endDate) }
+
+  const afrrCapacity = (afrr?.afrrHourly ?? []).filter(d => inRangeTs(d.timestamp))
+  const afrrEnergy   = (afrr?.daily      ?? []).filter(d => inRange(d.date))
+  const fcrHourly    = (afrr?.fcrHourly  ?? []).filter(d => inRangeTs(d.timestamp))
   const isMock = !!errors?.afrr
 
-  const prevAfrr   = compareEnabled ? (compareData?.afrr?.daily ?? []).filter(d => inPrevRange(d.date)) : []
-  const mergedAfrr = afrrData.map((d, i) => ({
+  const prevAfrrCapacity = compareEnabled ? (compareData?.afrr?.afrrHourly ?? []).filter(d => inPrevTs(d.timestamp))  : []
+  const prevAfrrEnergy   = compareEnabled ? (compareData?.afrr?.daily      ?? []).filter(d => inPrevRange(d.date))    : []
+
+  const mergedAfrrCapacity = afrrCapacity.map((d, i) => ({
     ...d,
-    prevAfrrCapacityUpPrice:   prevAfrr[i]?.afrrCapacityUpPrice,
-    prevAfrrCapacityDownPrice: prevAfrr[i]?.afrrCapacityDownPrice,
-    prevAfrrUpEnergyPrice:     prevAfrr[i]?.afrrUpEnergyPrice,
-    prevAfrrDownEnergyPrice:   prevAfrr[i]?.afrrDownEnergyPrice,
+    prevAfrrCapacityUpPrice:   prevAfrrCapacity[i]?.afrrCapacityUpPrice,
+    prevAfrrCapacityDownPrice: prevAfrrCapacity[i]?.afrrCapacityDownPrice,
+  }))
+  const mergedAfrr = afrrEnergy.map((d, i) => ({
+    ...d,
+    prevAfrrUpEnergyPrice:   prevAfrrEnergy[i]?.afrrUpEnergyPrice,
+    prevAfrrDownEnergyPrice: prevAfrrEnergy[i]?.afrrDownEnergyPrice,
   }))
 
-  // FCR compare: align previous period by index
-  const prevFcrHourly = compareEnabled ? (compareData?.afrr?.fcrHourly ?? []).filter(d => {
-    const date = d.timestamp?.slice(0, 10)
-    return (!compareDates?.startDate || date >= compareDates.startDate) && (!compareDates?.endDate || date <= compareDates.endDate)
-  }) : []
+  const prevFcrHourly = compareEnabled ? (compareData?.afrr?.fcrHourly ?? []).filter(d => inPrevTs(d.timestamp)) : []
   const mergedFcr = fcrHourly.map((d, i) => ({
     ...d,
     prevPrice: prevFcrHourly[i]?.price ?? null,
   }))
 
-  const zoom0 = useZoom(mergedAfrr, 'date')
-  const zoom1 = useZoom(mergedFcr,  'timestamp')
-  const zoom2 = useZoom(mergedAfrr, 'date')
+  const zoom0 = useZoom(mergedAfrrCapacity, 'timestamp')
+  const zoom1 = useZoom(mergedFcr,          'timestamp')
+  const zoom2 = useZoom(mergedAfrr,         'date')
 
   return (
     <section className="asset-section">
@@ -92,14 +94,21 @@ export default function AncillaryServicesSection({ afrr, errors, startDate, endD
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+            <XAxis dataKey="timestamp"
+              tickFormatter={v => {
+                if (!v) return ''
+                const [date, time] = v.split('T')
+                return `${fmtDate(date)} ${time}`
+              }}
+              tick={{ fill: '#94a3b8', fontSize: 10 }}
+            />
             <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend wrapperStyle={legendStyle} />
-            <Line type="monotone" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Capacity Up (EUR/MW/h)" />
-            <Line type="monotone" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Capacity Down (EUR/MW/h)" />
-            {compareEnabled && <Line type="monotone" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" />}
-            {compareEnabled && <Line type="monotone" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" />}
+            <Line type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Capacity Up (EUR/MW/h)" />
+            <Line type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Capacity Down (EUR/MW/h)" />
+            {compareEnabled && <Line type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up" />}
+            {compareEnabled && <Line type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" />}
             {zoom0.refArea.left && zoom0.refArea.right && (
               <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}

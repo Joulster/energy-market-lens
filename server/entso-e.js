@@ -498,58 +498,68 @@ function dateChunks(startIso, endIso, maxDays) {
 
 // Fetch aFRR and FCR capacity procurement prices from ENTSO-E.
 // Document type A81 (Contracted reserves), businessType B95 (Procured capacity).
-// Process types: A51 = aFRR, A52 = FCR (per ENTSO-E balancing document mapping).
-// Agreement type A01 = Daily (D-1 procurement used by TenneT NL).
+// Process types: A51 = aFRR, A52 = FCR.
+// Agreement types:
+//   A13 = aFRR — 4-hour blocks (6 blocks/day × 2 directions = 12 series/day)
+//   A01 = FCR  — 4-hour blocks (6 blocks/day × 1 direction  =  6 series/day)
 // Response is a ZIP file containing XML — requires binary fetch + decompress.
 // ENTSO-E limits to 100 instances per request:
-//   aFRR = 2 series/day (up + down) → chunk at 45 days
-//   FCR  = 6 series/day (4-h blocks) → chunk at 14 days
+//   aFRR A13: 12 series/day → chunk at 8 days  (96 < 100)
+//   FCR  A01:  6 series/day → chunk at 14 days (84 < 100)
 //
 // Returns:
-//   afrrCapacityUp   { [cetDate]: price }   — A01 (up-regulation)
-//   afrrCapacityDown { [cetDate]: price }   — A02 (down-regulation)
-//   fcrHourly        [{ timestamp, price }] — A03 symmetric, one entry per 4-h block (CET)
+//   afrrHourly  [{ timestamp, afrrCapacityUpPrice, afrrCapacityDownPrice }]
+//               one entry per 4-h block (CET), Up = A01, Down = A02
+//   fcrHourly   [{ timestamp, price }]
+//               one entry per 4-h block (CET), symmetric A03
 export async function fetchCapacityPrices(startDate, endDate) {
   const sd = startDate ?? new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10)
   const ed = endDate   ?? new Date().toISOString().slice(0, 10)
 
-  const base = {
+  const baseA81 = {
     documentType: 'A81',
     businessType: 'B95',
     controlArea_Domain: BIDDING_ZONE,
-    'type_MarketAgreement.Type': 'A01',
   }
 
-  // Fetch all chunks for a given processType and collect raw points.
+  // Fetch all chunks for a given processType + agreementType and collect raw points.
   // Each ZIP contains one XML file per delivery period — parse all of them.
-  async function fetchAllChunks(processType, maxDays) {
+  async function fetchAllChunks(processType, agreementType, maxDays) {
+    const params = { ...baseA81, processType, 'type_MarketAgreement.Type': agreementType }
     const allPoints = []
     for (const { ps, pe } of dateChunks(sd, ed, maxDays)) {
       try {
-        const buf = await entsoeRequestBinary({ ...base, processType, periodStart: ps, periodEnd: pe })
+        const buf = await entsoeRequestBinary({ ...params, periodStart: ps, periodEnd: pe })
         for (const xml of unzipAllXml(buf)) {
           allPoints.push(...parseCapacityTimeSeries(xml))
         }
       } catch (e) {
-        console.warn(`ENTSO-E A81 ${processType} chunk ${ps}–${pe} failed:`, e.message)
+        console.warn(`ENTSO-E A81 ${processType}/${agreementType} chunk ${ps}–${pe} failed:`, e.message)
       }
     }
     return allPoints
   }
 
   const [afrrPoints, fcrPoints] = await Promise.all([
-    fetchAllChunks('A51', 45),  // 2 series/day → safe up to 45 days
-    fetchAllChunks('A52', 14),  // 6 series/day → safe up to 14 days
+    fetchAllChunks('A51', 'A13', 8),   // 4-h blocks: 12 series/day → 8-day chunks
+    fetchAllChunks('A52', 'A01', 14),  // 4-h blocks:  6 series/day → 14-day chunks
   ])
 
-  // ── aFRR: one price per CET day, two directions ──────────────────────────
-  const afrrCapacityUp   = {}
-  const afrrCapacityDown = {}
+  // ── aFRR: 4-hour blocks, two directions (A01=up, A02=down) ──────────────
+  const afrrBySlot = {}
   for (const { ts, value, direction } of afrrPoints) {
-    const date = cetDate(ts)
-    if (direction === 'A01') afrrCapacityUp[date]   = value
-    if (direction === 'A02') afrrCapacityDown[date] = value
+    const timestamp = `${cetDate(ts)}T${String(cetHour(ts)).padStart(2, '0')}:00`
+    if (!afrrBySlot[timestamp]) afrrBySlot[timestamp] = {}
+    if (direction === 'A01') afrrBySlot[timestamp].up   = value
+    if (direction === 'A02') afrrBySlot[timestamp].down = value
   }
+  const afrrHourly = Object.entries(afrrBySlot)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([timestamp, { up = null, down = null }]) => ({
+      timestamp,
+      afrrCapacityUpPrice:   up,
+      afrrCapacityDownPrice: down,
+    }))
 
   // ── FCR: 4-hour blocks, symmetric (A03) ─────────────────────────────────
   const seen = new Set()
@@ -560,5 +570,5 @@ export async function fetchCapacityPrices(startDate, endDate) {
   }
   fcrHourly.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
-  return { afrrCapacityUp, afrrCapacityDown, fcrHourly }
+  return { afrrHourly, fcrHourly }
 }
