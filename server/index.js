@@ -31,8 +31,8 @@ function marketDataTTL(endDate) {
   return endDate < today ? 86400 : 3600
 }
 
-async function cachedMarketRoute(res, namespace, startDate, endDate, fetcher) {
-  const fingerprint = `${startDate ?? 'default'}|${endDate ?? 'default'}`
+async function cachedMarketRoute(res, namespace, startDate, endDate, fetcher, salt = '') {
+  const fingerprint = `${salt}${startDate ?? 'default'}|${endDate ?? 'default'}`
   const hit = await getCached(namespace, fingerprint)
   if (hit) return res.json({ ok: true, data: hit.items, fromCache: true })
   try {
@@ -69,7 +69,7 @@ app.get('/api/afrr', async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:afrr', startDate, endDate, async () => {
     // TenneT: energy prices (dispatch_up / dispatch_down from settlement-prices)
-    // ENTSO-E: capacity prices (A84 procurement document, A52=aFRR, A51=FCR)
+    // ENTSO-E: capacity prices (A81/B95, A51=aFRR, A52=FCR)
     const [tennet, entsoe] = await Promise.all([
       fetchAFRRData(startDate, endDate),
       fetchCapacityPrices(startDate, endDate).catch(err => {
@@ -85,7 +85,7 @@ app.get('/api/afrr', async (req, res) => {
         fcrPrice:          fcrByDay[d.date]          ?? null,
       }))
     }
-  })
+  }, 'v3|')
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
