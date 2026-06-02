@@ -429,7 +429,9 @@ function parseBalancingTimeSeries(xml) {
 function dailyAvgFromPoints(points) {
   const byDay = {}
   for (const { ts, value } of points) {
-    const day = format(ts, 'yyyy-MM-dd')
+    // Use CET date so ENTSO-E periods starting at 22:00 UTC (= 00:00 CET)
+    // align with TenneT's CET-based dates
+    const day = cetDate(ts)
     if (!byDay[day]) byDay[day] = []
     byDay[day].push(value)
   }
