@@ -60,15 +60,15 @@ src/
   App.css                          # Single dark-theme stylesheet
   main.jsx                         # Vite entry
   data/
-    index.js                       # loadSourceData(), loadAllMarketData(), buildNarrativePayload(), fetchNarrative()
+    index.js                       # loadSourceData(), loadAllMarketData(), buildNarrativePayload(), fetchSectionNarrative()
     dateRange.js                   # RANGE_OPTIONS, computeDates(), computePrevDates()
-    defaultPrompts.js              # Client-side copies of all 3 system prompts (with placeholders) for Reset
+    defaultPrompts.js              # Client-side copies of all 5 system prompts (with placeholders) for Reset
   components/
-    ChartsPanel/index.jsx          # Left panel — 3 market sections + compare feature + AI summary
+    ChartsPanel/index.jsx          # Left panel — 3 market sections + compare feature + per-section AI summaries
     NarrativePanel.jsx             # Right panel — Regulatory Watch + Customer Signals + prompt editor
     RegulatoryWatch.jsx            # Self-contained; accepts regulatoryPrompt prop + configurable lookback
     CustomerSignals.jsx            # Self-contained; accepts customerSignalsPrompt prop + configurable lookback
-    PromptEditorModal.jsx          # 3-tab modal for editing system prompts (narrative/regulatory/customerSignals)
+    PromptEditorModal.jsx          # 5-tab modal for editing system prompts (3 narrative + regulatory + customerSignals)
     charts/
       shared.jsx                   # COLORS, ChartWrap, SourceBadge, fmtDate, chartProps, CompareTooltip, useLegendToggle
       useZoom.js                   # Reusable drag-to-zoom hook for all time-series charts
@@ -84,7 +84,7 @@ src/
 2. `dataLoading` state (`{ dayAhead, generation, imbalance, afrr }`) is tracked per source and passed down
 3. Each chart section renders immediately with a skeleton, flipping to live data as its source resolves
 4. `loadAllMarketData()` is still used by the compare-period feature (needs all 4 sources together)
-5. ChartsPanel's Generate Summary button calls `buildNarrativePayload()` then `POST /api/narrative`
+5. Each section has its own Generate button — `ChartsPanel` calls `buildNarrativePayload()` once, then `fetchSectionNarrative(section, fullPayload, ...)` for that section only
 6. Regulatory Watch and Customer Signals call their own endpoints independently
 
 **Compare previous period:**
@@ -103,8 +103,9 @@ server/
   index.js         # Express app, all routes, static file serving
   entso-e.js       # ENTSO-E Transparency Platform API (A44, A75, A81/B95 for aFRR+FCR capacity)
   tennet.js        # TenneT REST API — imbalance midprice + aFRR energy prices (settlement-prices endpoint)
-  claude.js        # generateNarrative(), generateRegulatoryWatch(), generateCustomerSignals()
-  prompts.js       # Central store for all 3 system prompts + PROMPT_VERSIONS for LangSmith filtering
+  claude.js        # generateDayAheadNarrative(), generateBalancingNarrative(), generateAncillaryNarrative(),
+                   # generateRegulatoryWatch(), generateCustomerSignals(), callHaiku() shared helper
+  prompts.js       # Central store for all 5 system prompts + PROMPT_VERSIONS for LangSmith filtering
   researchCache.js # Redis-backed cache (ioredis); in-memory fallback when REDIS_URL unset
   mockData.js      # Seeded mock data (kept for reference, no longer used as fallback)
 ```
@@ -167,9 +168,13 @@ Cache salt is versioned (currently `v10|`) — bump to bust Redis when the respo
 
 | Function | Model | Notes |
 |---|---|---|
-| `generateNarrative()` | `claude-haiku-4-5` | Fast, no web search needed |
+| `generateDayAheadNarrative()` | `claude-haiku-4-5` | Per-section; plain string output |
+| `generateBalancingNarrative()` | `claude-haiku-4-5` | Per-section; returns null if no imbalance data |
+| `generateAncillaryNarrative()` | `claude-haiku-4-5` | Per-section; returns null if all sub-keys null |
 | `generateRegulatoryWatch()` | `claude-sonnet-4-6` | Requires `web_search_20250305` tool — haiku doesn't support it |
 | `generateCustomerSignals()` | `claude-sonnet-4-6` | Same — web search only works on Sonnet+ |
+
+All three narrative functions share a `callHaiku()` helper in `claude.js` that handles the SDK call, strips code fences, and converts the literal string `"null"` to JS `null`.
 
 `web_search_20250305` is Anthropic's built-in server-side tool. `max_uses: 4` per call (reduced from 8 for cost).
 
@@ -182,9 +187,11 @@ All three Claude functions in `server/claude.js` are wrapped with `traceable()` 
 **Prompt versions** are tracked in `server/prompts.js`:
 ```js
 export const PROMPT_VERSIONS = {
-  narrative:       'v2',   // bump when prompt changes — traces are filterable by version
-  regulatory:      'v1',
-  customerSignals: 'v1',
+  narrativeDayAhead:          'v1',  // bump when prompt changes — traces are filterable by version
+  narrativeBalancing:         'v1',
+  narrativeAncillaryServices: 'v1',
+  regulatory:                 'v1',
+  customerSignals:            'v1',
 }
 ```
 
@@ -305,36 +312,109 @@ The right panel (`narrative-panel`) is `position: sticky; top: 53px` — it stay
 
 ## AI Market Summary (narrative)
 
-- Each chart section has its own AI Summary block directly below it
-- One **Generate Summary** button triggers a single Claude Haiku call populating all three blocks
-- Returns `{ dayAhead, balancing, ancillaryServices }` JSON — all three sections are now populated when data is available
-- `null` → "No data available"; `undefined` → block hidden (not yet generated)
-- Stale warning shown when date range changes after generation
-- 15-minute client-side session cache per `{ startDate, endDate }` pair
+Multi-agent architecture: each chart section has its own independent Generate button, Haiku call, cache entry, and prompt. Generating one section never triggers or invalidates another.
 
-**Payload (`buildNarrativePayload` in `src/data/index.js`):**
+**Trigger flow:**
+1. User clicks Generate on a section → `ChartsPanel` calls `buildNarrativePayload(data, startDate, endDate)` to build the full payload
+2. `fetchSectionNarrative(section, fullPayload, systemPrompt, startDate, endDate, forceRefresh)` is called for that section only
+3. Client checks `sectionNarrativeCache`; on miss, POSTs to `/api/narrative` with `{ section, sectionData: fullPayload, ... }`
+4. Server routes to the matching generator (`generateDayAheadNarrative` / `generateBalancingNarrative` / `generateAncillaryNarrative`) via `NARRATIVE_GENERATORS[section]`
+5. Generator reads only its relevant keys from `sectionData`; calls `callHaiku()`
+6. Returns a plain string, or the JS literal `null` if no data
 
-Sends period-summarised data for all three sections:
+**API contract (`POST /api/narrative`):**
+```js
+// Request body
+{
+  section:      'dayAhead' | 'balancing' | 'ancillaryServices',
+  sectionData:  object,   // full buildNarrativePayload() output — server reads only what it needs
+  systemPrompt: string?,  // overrides the default prompt for this section
+  startDate:    string?,  // YYYY-MM-DD
+  endDate:      string?,  // YYYY-MM-DD
+  forceRefresh: boolean?, // bypasses both client and server cache
+}
+
+// Response
+{ ok: true, narrative: string | null, fromCache: boolean, cachedAt: ISO-string }
+```
+
+**Return value per section:** a single plain string — the summary text. Not a JSON object. `callHaiku()` converts the literal model output `"null"` to JS `null`. `null` → "No data available for this section."; `undefined` → block not yet generated (hidden).
+
+**`buildNarrativePayload()` output — exact shape sent as `sectionData`:**
 ```js
 {
-  period: { from, to },
-  dayAheadPrice: { avgEurMwh, highEurMwh, lowEurMwh, rangeEurMwh, negativeHours, dailyHLA, bestArbitrageWindow },
-  negativeHoursPerWeek: [...],
-  balancing: {                          // null if no imbalance data
-    avgMidPriceEurMwh, highMidPriceEurMwh, lowMidPriceEurMwh, rangeEurMwh,
-    daily: [{ date, midPrice }],
+  period: { from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' },
+
+  // ── Day-Ahead section accesses these keys ─────────────────────────────────
+  dayAheadPrice: {
+    avgEurMwh:    number | null,   // period mean of daily averages
+    highEurMwh:   number | null,   // period max of daily highs
+    lowEurMwh:    number | null,   // period min of daily lows
+    rangeEurMwh:  number | null,   // highEurMwh − lowEurMwh
+    negativeHours: number,         // sum of all negative-price hours in period
+    dailyHLA: [{ date: 'YYYY-MM-DD', avg: number, high: number, low: number, negativeHours: number }],
+    bestArbitrageWindow: {         // null when no negative-price days in period
+      date: 'YYYY-MM-DD',
+      chargeWindow:    { startHour: number, endHour: number, avgPrice: number }, // EUR/MWh; contiguous block where avg < 0
+      dischargeWindow: { startHour: number, endHour: number, avgPrice: number }, // EUR/MWh; highest-avg 3-h block after charge (falls back to 1 h)
+      spread: number,              // dischargeWindow.avgPrice − chargeWindow.avgPrice (EUR/MWh)
+    } | null,
   },
-  ancillaryServices: {                  // null if no aFRR/FCR data
-    afrrEnergy:   { avgUpEurMwh, avgDownEurMwh },          // null if unavailable
-    afrrCapacity: { avgUpPriceEurMwPerH, avgDownPriceEurMwPerH, avgUpMW, avgDownMW }, // null if unavailable
-    fcr:          { avgPriceEurMwPerH, avgCapacityMW },    // null if unavailable
-  },
+  negativeHoursPerWeek: [{ week: 'YYYY-MM-DD', count: number }],
+
+  // ── Balancing section accesses these keys ─────────────────────────────────
+  balancing: {                     // null when imbalance.daily is empty for the period
+    avgMidPriceEurMwh:  number,    // mean of daily mid prices
+    highMidPriceEurMwh: number,    // max daily mid price
+    lowMidPriceEurMwh:  number,    // min daily mid price
+    rangeEurMwh:        number,    // high − low
+    daily: [{ date: 'YYYY-MM-DD', midPrice: number }],
+  } | null,
+
+  // ── Ancillary section accesses these keys ─────────────────────────────────
+  ancillaryServices: {             // null when all three sub-arrays are empty for the period
+    afrrEnergy: {                  // null when afrrEnergyRaw is empty for the period
+      avgUpEurMwh:   number,       // mean of afrrUpEnergyPrice (15-min TenneT points)
+      avgDownEurMwh: number,       // mean of afrrDownEnergyPrice
+    } | null,
+    afrrCapacity: {                // null when afrrHourly is empty for the period
+      avgUpPriceEurMwPerH:   number,  // mean of afrrCapacityUpPrice (4-h ENTSO-E blocks)
+      avgDownPriceEurMwPerH: number,  // mean of afrrCapacityDownPrice
+      avgUpMW:               number,  // mean of afrrCapacityUpMW
+      avgDownMW:             number,  // mean of afrrCapacityDownMW
+    } | null,
+    fcr: {                         // null when fcrHourly is empty for the period
+      avgPriceEurMwPerH: number,   // mean of price (4-h ENTSO-E blocks)
+      avgCapacityMW:     number,   // mean of capacityMW
+    } | null,
+  } | null,
 }
 ```
 
-`hourlyHLAForNegativeDays` is computed client-side to derive `bestArbitrageWindow` but excluded from the POST body to keep the payload small. Express body limit is `2mb` to support wide date ranges.
+`hourlyHLAForNegativeDays` is computed in `buildNarrativePayload()` to derive `bestArbitrageWindow` but is intentionally excluded from the returned object to keep the POST body small.
 
-**Narrative prompt (v2):** Instructs Haiku to write 2–3 sentences per section grounded in the provided numbers, returning null for any section whose payload key is null. Never fabricates numbers. Prompt version tracked in `server/prompts.js` for LangSmith filtering.
+**Per-section prompts (`server/prompts.js`):**
+
+| Prompt constant | Section | Output |
+|---|---|---|
+| `NARRATIVE_PROMPT_DAY_AHEAD` | Day-Ahead | 2–3 sentences; plain string |
+| `NARRATIVE_PROMPT_BALANCING` | Balancing | 2 sentences; plain string; literal `"null"` if `balancing` is null |
+| `NARRATIVE_PROMPT_ANCILLARY` | Ancillary | 1–2 sentences; plain string; literal `"null"` if all sub-keys are null |
+
+Client-side defaults mirror these in `src/data/defaultPrompts.js` as `DEFAULT_NARRATIVE_PROMPT_DAY_AHEAD`, `DEFAULT_NARRATIVE_PROMPT_BALANCING`, `DEFAULT_NARRATIVE_PROMPT_ANCILLARY`. Prompt versions tracked individually in `PROMPT_VERSIONS`.
+
+**Client-side cache (`sectionNarrativeCache` in `src/data/index.js`):**
+- Session-scoped — no TTL; persists until page reload
+- Key format: `${section}|${startDate}|${endDate}|${systemPrompt}`
+- Each section cached independently; generating Day-Ahead does not affect the Balancing or Ancillary entries
+- `forceRefresh = (narratives[section] !== undefined)` in `ChartsPanel` — first Generate uses `false`; every subsequent click (Regenerate) uses `true`, bypassing both client and server caches
+
+**Server-side cache (`researchCache.js`):**
+- Namespace per section: `narrative:dayAhead`, `narrative:balancing`, `narrative:ancillaryServices`
+- TTL: 24 hours (fixed — `NARRATIVE_TTL = 24 * 60 * 60`)
+- Fingerprint: `JSON.stringify({ startDate, endDate, prompt: systemPrompt ?? '' })`
+
+**Stale warning:** Each section tracks its own `generatedDatesMap[section]`. The "⚠ Date range changed" chip appears independently per section when `generatedDatesMap[section].startDate/endDate` diverges from the current date range.
 
 ---
 
@@ -371,10 +451,13 @@ Sends period-summarised data for all three sections:
 
 ## Configurable Prompts
 
-- **Pencil button (✏)** opens a 3-tab modal (Market Outlook / Regulatory Watch / Customer Signals)
-- Amber dot when prompt differs from default
-- Each tab: textarea, Save, Reset (restores from `src/data/defaultPrompts.js`)
+- **Pencil button (✏)** opens a **5-tab modal**: Day-Ahead · Balancing · Ancillary Svcs · Regulatory Watch · Customer Signals
+- Amber dot on the button when any prompt differs from its default
+- Dot on individual tab when that tab's prompt is modified
+- Each tab: textarea, "Try Now" (saves + applies immediately), "Reset to default" (restores from `src/data/defaultPrompts.js`)
+- Prompt keys in `promptSettings` (App state): `narrativeDayAhead`, `narrativeBalancing`, `narrativeAncillaryServices`, `regulatory`, `customerSignals`
 - `server/prompts.js` is the single source of truth; `src/data/defaultPrompts.js` mirrors for client Reset
+- Placeholders hint shown only on non-narrative tabs (`[TODAY DATE]`, `[CUTOFF DATE]`, `[SOURCE LIST]` etc. don't apply to narrative)
 
 ---
 
@@ -398,7 +481,9 @@ Sends period-summarised data for all three sections:
 
 **Sticky narrative sidebar with page scroll**: The right panel sticks in view as you scroll through charts. The page itself scrolls (not the charts panel), so the charts panel grows to its full content height. The sidebar uses `max-height` + `overflow-y: auto` so it never clips content — it scrolls internally only when the total content exceeds the viewport.
 
-**Errors propagate to Claude**: `buildNarrativePayload()` passes null for any missing data section. The narrative prompt instructs Claude to return null for those keys — never fabricate.
+**Per-section narrative agents**: Three independent Haiku calls (one per market section) replace a single combined call. Each section has its own prompt, cache namespace, stale indicator, and prompt editor tab. Sections can be regenerated and tuned independently — generating Day-Ahead does not bust or block the Balancing cache.
+
+**Errors propagate to Claude**: `buildNarrativePayload()` sets `balancing` and `ancillaryServices` to `null` when their source data is empty. Each narrative prompt instructs Haiku to return the literal string `"null"` in that case; `callHaiku()` converts it to JS `null`, which renders as "No data available for this section." Never fabricates.
 
 **Lazy Anthropic client**: SDK client created on first use so a missing API key doesn't crash the server on startup.
 
