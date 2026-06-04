@@ -11,8 +11,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api':  { target: 'http://localhost:3001', changeOrigin: true },
-      '/auth': { target: 'http://localhost:3001', changeOrigin: true },
+      '/api':              { target: 'http://localhost:3001', changeOrigin: true },
+      '/auth/magic-link':  { target: 'http://localhost:3001', changeOrigin: true },
+      '/auth/verify-code': { target: 'http://localhost:3001', changeOrigin: true },
+      '/auth/callback':    { target: 'http://localhost:3001', changeOrigin: true },
+      '/auth/logout':      { target: 'http://localhost:3001', changeOrigin: true },
     },
   },
 })

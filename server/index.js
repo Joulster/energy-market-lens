@@ -206,8 +206,19 @@ app.get('*', async (req, res) => {
   res.sendFile(path.join(distDir, 'index.html'))
 })
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Energy Market Lens API server running on http://localhost:${PORT}`)
   if (!process.env.ENTSOE_API_KEY)    console.warn('  ⚠  ENTSOE_API_KEY not set — will use mock data')
   if (!process.env.ANTHROPIC_API_KEY) console.warn('  ⚠  ANTHROPIC_API_KEY not set — narrative disabled')
+  if (!process.env.REDIS_URL) {
+    console.warn('  ⚠  REDIS_URL not set — using in-memory cache (lost on restart, Claude called on every deploy)')
+  } else {
+    try {
+      const { getCached } = await import('./researchCache.js')
+      await getCached('__ping__', '__ping__') // triggers Redis connection
+      console.log('  ✓  Redis connected — research cache will persist across deploys')
+    } catch (err) {
+      console.warn('  ⚠  Redis connection failed:', err.message)
+    }
+  }
 })
