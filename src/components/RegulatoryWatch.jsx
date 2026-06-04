@@ -12,7 +12,7 @@ const DEFAULT_SOURCES = [
 
 let nextId = DEFAULT_SOURCES.length + 1
 
-export default function RegulatoryWatch({ regulatoryPrompt }) {
+export default function RegulatoryWatch() {
   const [sources, setSources]           = useState(DEFAULT_SOURCES)
   const [lookback, setLookback]         = useState(90)
   const [showSettings, setShowSettings] = useState(false)
@@ -37,7 +37,7 @@ export default function RegulatoryWatch({ regulatoryPrompt }) {
       const res = await fetch('/api/regulatory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sources, lookback, systemPrompt: regulatoryPrompt }),
+        body: JSON.stringify({ sources, lookback }),
       })
       const data = await res.json()
       if (!data.ok) { setError(data.error || 'Request failed'); return }

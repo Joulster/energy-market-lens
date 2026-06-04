@@ -1,15 +1,26 @@
-import express from 'express'
-import cors from 'cors'
-import dotenv from 'dotenv'
+import express      from 'express'
+import cors         from 'cors'
+import cookieParser from 'cookie-parser'
+import dotenv       from 'dotenv'
 import { fileURLToPath } from 'url'
-import path from 'path'
+import path         from 'path'
 import { traceable } from 'langsmith/traceable'
 import { fetchDayAheadPrices, fetchActualGeneration, fetchCapacityPrices } from './entso-e.js'
 import { fetchImbalancePrices, fetchAFRRData } from './tennet.js'
 import { generateDayAheadNarrative, generateBalancingNarrative, generateAncillaryNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
 import { getCached, setCached } from './researchCache.js'
+import { authRouter, requireAuth, getSession } from './auth.js'
 
 dotenv.config()
+
+// ── Fail fast on missing auth env vars ────────────────────────────────────
+const REQUIRED_AUTH_VARS = ['WORKOS_API_KEY', 'WORKOS_CLIENT_ID', 'APP_BASE_URL']
+const missingVars = REQUIRED_AUTH_VARS.filter(v => !process.env[v])
+if (missingVars.length) {
+  console.error(`\n  ✗ Missing required environment variables: ${missingVars.join(', ')}`)
+  console.error('  Add them to .env or your Railway dashboard and restart.\n')
+  process.exit(1)
+}
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname  = path.dirname(__filename)
@@ -17,8 +28,12 @@ const distDir    = path.join(__dirname, '..', 'dist')
 
 const app = express()
 app.use(cors())
+app.use(cookieParser())
 app.use(express.json({ limit: '2mb' }))
 app.use(express.static(distDir))
+
+// Auth routes (login, callback, logout, unauthorised, /api/auth/me)
+app.use(authRouter)
 
 const PORT = process.env.PORT || 3001
 
@@ -47,25 +62,25 @@ async function cachedMarketRoute(res, namespace, startDate, endDate, fetcher, sa
 
 app.get('/health', (req, res) => res.json({ ok: true }))
 
-app.get('/api/day-ahead-prices', async (req, res) => {
+app.get('/api/day-ahead-prices', requireAuth, async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:day-ahead', startDate, endDate,
     () => fetchDayAheadPrices(startDate, endDate))
 })
 
-app.get('/api/actual-generation', async (req, res) => {
+app.get('/api/actual-generation', requireAuth, async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:generation', startDate, endDate,
     () => fetchActualGeneration(startDate, endDate))
 })
 
-app.get('/api/imbalance-prices', async (req, res) => {
+app.get('/api/imbalance-prices', requireAuth, async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:imbalance', startDate, endDate,
     () => fetchImbalancePrices(startDate, endDate), 'v2|')
 })
 
-app.get('/api/afrr', async (req, res) => {
+app.get('/api/afrr', requireAuth, async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:afrr', startDate, endDate, async () => {
     // TenneT: energy prices (dispatch_up / dispatch_down from settlement-prices)
@@ -88,12 +103,7 @@ app.get('/api/afrr', async (req, res) => {
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours
 
 // ── Traceable route handlers ──────────────────────────────────────────────────
-// Each handler is wrapped so LangSmith shows a parent "route" trace containing
-// the cache-hit decision. When fromCache is true, the child LLM span never fires
-// — the trace correctly records 0 tokens for that request.
 
-// One handler per section — each caches under its own namespace so sections
-// are independently cacheable and independently re-generatable.
 const NARRATIVE_GENERATORS = {
   dayAhead:          generateDayAheadNarrative,
   balancing:         generateBalancingNarrative,
@@ -141,7 +151,7 @@ const _customerSignalsHandler = traceable(
   { name: 'customerSignalsRoute', run_type: 'chain', metadata: { service: 'energy-market-lens' } }
 )
 
-app.post('/api/narrative', async (req, res) => {
+app.post('/api/narrative', requireAuth, async (req, res) => {
   try {
     const { section, sectionData, systemPrompt, startDate, endDate, forceRefresh } = req.body
     if (!section)      return res.status(400).json({ error: 'section required (dayAhead | balancing | ancillaryServices)' })
@@ -154,7 +164,7 @@ app.post('/api/narrative', async (req, res) => {
   }
 })
 
-app.post('/api/regulatory', async (req, res) => {
+app.post('/api/regulatory', requireAuth, async (req, res) => {
   try {
     const { sources, lookback, systemPrompt } = req.body
     if (!sources || !Array.isArray(sources)) return res.status(400).json({ error: 'sources array required' })
@@ -169,7 +179,7 @@ app.post('/api/regulatory', async (req, res) => {
   }
 })
 
-app.post('/api/customer-signals', async (req, res) => {
+app.post('/api/customer-signals', requireAuth, async (req, res) => {
   try {
     const { sources, companies, topics, lookback, systemPrompt } = req.body
     if (!sources  || !Array.isArray(sources)  || sources.length  === 0) return res.status(400).json({ error: 'sources must be a non-empty array'  })
@@ -184,8 +194,17 @@ app.post('/api/customer-signals', async (req, res) => {
   }
 })
 
-// Catch-all: serve React app for any non-API route (client-side routing)
-app.get('*', (req, res) => res.sendFile(path.join(distDir, 'index.html')))
+// Catch-all: serve React SPA.
+// /auth/* routes skip session check so React Router can render Login/Unauthorised.
+// All other routes require a valid session — redirect to /auth/login if absent.
+app.get('*', async (req, res) => {
+  if (req.path.startsWith('/auth/')) {
+    return res.sendFile(path.join(distDir, 'index.html'))
+  }
+  const user = await getSession(req)
+  if (!user) return res.redirect('/auth/login')
+  res.sendFile(path.join(distDir, 'index.html'))
+})
 
 app.listen(PORT, () => {
   console.log(`Energy Market Lens API server running on http://localhost:${PORT}`)

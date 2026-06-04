@@ -5,20 +5,13 @@ import AncillaryServicesSection from '../charts/AncillaryServicesSection.jsx'
 import { buildNarrativePayload, fetchSectionNarrative, loadAllMarketData } from '../../data/index.js'
 import { RANGE_OPTIONS, computeDates, computePrevDates } from '../../data/dateRange.js'
 
-// Maps section key → promptSettings key
-const SECTION_PROMPT_KEY = {
-  dayAhead:          'narrativeDayAhead',
-  balancing:         'narrativeBalancing',
-  ancillaryServices: 'narrativeAncillaryServices',
-}
-
-const SECTIONS = Object.keys(SECTION_PROMPT_KEY)
+const SECTIONS = ['dayAhead', 'balancing', 'ancillaryServices']
 
 function makePerSection(value) {
   return Object.fromEntries(SECTIONS.map(s => [s, value]))
 }
 
-export default function ChartsPanel({ data, dataLoading, narrativePrompts, selectedRange, onRangeChange, style }) {
+export default function ChartsPanel({ data, dataLoading, selectedRange, onRangeChange, style }) {
   const { dayAhead, imbalance, afrr, errors } = data
 
   // ── Per-section narrative state ───────────────────────────────────────────
@@ -50,11 +43,10 @@ export default function ChartsPanel({ data, dataLoading, narrativePrompts, selec
     setLoadings(prev => ({ ...prev, [section]: true }))
     const datesSnapshot = { ...computeDates(selectedRange) }
     const forceRefresh  = narratives[section] !== undefined  // Regenerate on second click
-    const systemPrompt  = narrativePrompts[SECTION_PROMPT_KEY[section]]
     try {
       const fullPayload = buildNarrativePayload(data, datesSnapshot.startDate, datesSnapshot.endDate)
       const result = await fetchSectionNarrative(
-        section, fullPayload, systemPrompt,
+        section, fullPayload, undefined,
         datesSnapshot.startDate, datesSnapshot.endDate,
         forceRefresh
       )

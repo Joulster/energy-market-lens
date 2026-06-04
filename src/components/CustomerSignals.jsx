@@ -61,7 +61,7 @@ function TagInput({ tags, onChange, placeholder }) {
   )
 }
 
-export default function CustomerSignals({ customerSignalsPrompt }) {
+export default function CustomerSignals() {
   const [sources, setSources]         = useState(DEFAULT_SOURCES)
   const [companies, setCompanies]     = useState(DEFAULT_COMPANIES)
   const [topics, setTopics]           = useState(DEFAULT_TOPICS)
@@ -94,7 +94,6 @@ export default function CustomerSignals({ customerSignalsPrompt }) {
           companies,
           topics,
           lookback,
-          systemPrompt: customerSignalsPrompt,
         }),
       })
       const data = await res.json()

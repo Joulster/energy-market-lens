@@ -15,7 +15,8 @@ A full-stack dashboard for monitoring Dutch energy markets, built for a **Head o
 | AI | `@anthropic-ai/sdk` — Claude Haiku 4.5 (narrative) + Claude Sonnet 4.6 (regulatory/customer signals + web search) |
 | Cache | Redis (ioredis) — market data (1h/24h TTL) + research calls (monthly TTL); falls back to in-memory Map when `REDIS_URL` is not set |
 | Observability | LangSmith (`langsmith` SDK) — traces all Claude calls with token usage, latency, prompt version; silently no-ops when `LANGCHAIN_API_KEY` is absent |
-| Dev proxy | Vite proxies `/api/*` → `http://localhost:3001` (dev only; disabled in production) |
+| Auth | WorkOS User Management — magic link email flow; session cookie via Redis |
+| Dev proxy | Vite proxies `/api/*` and `/auth/*` → `http://localhost:3001` (dev only; disabled in production) |
 | Deployment | Docker (single container) on Railway — Express serves built React frontend from `dist/` |
 
 ### Running locally
@@ -32,6 +33,10 @@ npm run dev        # http://localhost:5173
 ANTHROPIC_API_KEY=sk-ant-...
 ENTSOE_API_KEY=<uuid>
 TENNET_API_KEY=<key>
+# Auth (required — server exits with code 1 if any are missing)
+WORKOS_API_KEY=sk_...
+WORKOS_CLIENT_ID=client_...
+APP_BASE_URL=http://localhost:5173   # dev; set to Railway URL in production
 # REDIS_URL is optional locally — omit it and the cache falls back to in-memory
 # LangSmith (optional — omit to disable tracing)
 LANGCHAIN_API_KEY=ls__...
@@ -43,7 +48,7 @@ LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 ### Production (Railway)
 - Build: `npm run build` (Vite) → `dist/`, then `node server/index.js`
 - Express serves `dist/` as static files and handles all `/api/*` routes on the same port
-- Environment variables set in Railway dashboard: `ANTHROPIC_API_KEY`, `ENTSOE_API_KEY`, `TENNET_API_KEY`, `PORT=3001`
+- Environment variables set in Railway dashboard: `ANTHROPIC_API_KEY`, `ENTSOE_API_KEY`, `TENNET_API_KEY`, `PORT=3001`, `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, `APP_BASE_URL=https://<your-railway-domain>`
 - `REDIS_URL` injected automatically by Railway's Redis service reference
 - Do NOT bake `LANGCHAIN_TRACING_V2=true` into Dockerfile — inject via env only
 - Healthcheck: `GET /health` → `{ ok: true }`
@@ -56,19 +61,22 @@ LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 
 ```
 src/
-  App.jsx                          # Root — loads market data, manages panel widths, passes to panels
-  App.css                          # Single dark-theme stylesheet
-  main.jsx                         # Vite entry
+  App.jsx                          # Root — loads market data, manages panel widths, Avatar component
+  App.css                          # Single dark-theme stylesheet (includes auth + avatar styles)
+  AppRouter.jsx                    # React Router: /auth/login, /auth/unauthorised, /* (AuthGate-wrapped App)
+  main.jsx                         # Vite entry — BrowserRouter wrapper
+  pages/
+    Login.jsx                      # Magic link login page (idle → loading → sent / error states)
+    Unauthorised.jsx               # "Access Restricted" page for un-provisioned accounts
   data/
     index.js                       # loadSourceData(), loadAllMarketData(), buildNarrativePayload(), fetchSectionNarrative()
     dateRange.js                   # RANGE_OPTIONS, computeDates(), computePrevDates()
-    defaultPrompts.js              # Client-side copies of all 5 system prompts (with placeholders) for Reset
   components/
+    AuthGate.jsx                   # Checks /api/auth/me on mount; provides useUser() hook via AuthContext
     ChartsPanel/index.jsx          # Left panel — 3 market sections + compare feature + per-section AI summaries
-    NarrativePanel.jsx             # Right panel — Regulatory Watch + Customer Signals + prompt editor
-    RegulatoryWatch.jsx            # Self-contained; accepts regulatoryPrompt prop + configurable lookback
-    CustomerSignals.jsx            # Self-contained; accepts customerSignalsPrompt prop + configurable lookback
-    PromptEditorModal.jsx          # 5-tab modal for editing system prompts (3 narrative + regulatory + customerSignals)
+    NarrativePanel.jsx             # Right panel — Regulatory Watch + Customer Signals
+    RegulatoryWatch.jsx            # Self-contained; configurable sources + lookback
+    CustomerSignals.jsx            # Self-contained; configurable sources, companies, topics, lookback
     charts/
       shared.jsx                   # COLORS, ChartWrap, SourceBadge, fmtDate, chartProps, CompareTooltip, useLegendToggle
       useZoom.js                   # Reusable drag-to-zoom hook for all time-series charts
@@ -100,7 +108,8 @@ src/
 
 ```
 server/
-  index.js         # Express app, all routes, static file serving
+  index.js         # Express app, all routes, static file serving; fail-fast on missing auth env vars
+  auth.js          # WorkOS magic link flow: authRouter (5 routes) + requireAuth middleware + getSession helper
   entso-e.js       # ENTSO-E Transparency Platform API (A44, A75, A81/B95 for aFRR+FCR capacity)
   tennet.js        # TenneT REST API — imbalance midprice + aFRR energy prices (settlement-prices endpoint)
   claude.js        # generateDayAheadNarrative(), generateBalancingNarrative(), generateAncillaryNarrative(),
@@ -114,6 +123,10 @@ server/
 | Method | Path | Source | Status |
 |---|---|---|---|
 | GET | `/health` | — | ✅ Healthcheck |
+| POST | `/auth/magic-link` | WorkOS createMagicAuth | ✅ Live |
+| GET | `/auth/callback` | WorkOS authenticateWithCode | ✅ Live |
+| GET | `/auth/logout` | Session delete + cookie clear | ✅ Live |
+| GET | `/api/auth/me` | Session lookup | ✅ Live |
 | GET | `/api/day-ahead-prices` | ENTSO-E A44 | ✅ Live |
 | GET | `/api/actual-generation` | ENTSO-E A75 | ✅ Live |
 | GET | `/api/imbalance-prices` | TenneT settlement-prices | ✅ Live |
@@ -122,7 +135,7 @@ server/
 | POST | `/api/regulatory` | Claude Sonnet 4.6 + web_search | ✅ Live |
 | POST | `/api/customer-signals` | Claude Sonnet 4.6 + web_search | ✅ Live |
 
-All non-API `GET` routes serve `dist/index.html` (client-side routing support).
+All non-auth `GET` routes serve `dist/index.html`; the catch-all redirects to `/auth/login` if no valid session is found (except `/auth/*` paths which are passed through directly).
 
 ---
 
@@ -401,7 +414,7 @@ Multi-agent architecture: each chart section has its own independent Generate bu
 | `NARRATIVE_PROMPT_BALANCING` | Balancing | 2 sentences; plain string; literal `"null"` if `balancing` is null |
 | `NARRATIVE_PROMPT_ANCILLARY` | Ancillary | 1–2 sentences; plain string; literal `"null"` if all sub-keys are null |
 
-Client-side defaults mirror these in `src/data/defaultPrompts.js` as `DEFAULT_NARRATIVE_PROMPT_DAY_AHEAD`, `DEFAULT_NARRATIVE_PROMPT_BALANCING`, `DEFAULT_NARRATIVE_PROMPT_ANCILLARY`. Prompt versions tracked individually in `PROMPT_VERSIONS`.
+Prompt versions tracked individually in `PROMPT_VERSIONS` in `server/prompts.js`.
 
 **Client-side cache (`sectionNarrativeCache` in `src/data/index.js`):**
 - Session-scoped — no TTL; persists until page reload
@@ -449,15 +462,31 @@ Client-side defaults mirror these in `src/data/defaultPrompts.js` as `DEFAULT_NA
 
 ---
 
-## Configurable Prompts
+## Authentication
 
-- **Pencil button (✏)** opens a **5-tab modal**: Day-Ahead · Balancing · Ancillary Svcs · Regulatory Watch · Customer Signals
-- Amber dot on the button when any prompt differs from its default
-- Dot on individual tab when that tab's prompt is modified
-- Each tab: textarea, "Try Now" (saves + applies immediately), "Reset to default" (restores from `src/data/defaultPrompts.js`)
-- Prompt keys in `promptSettings` (App state): `narrativeDayAhead`, `narrativeBalancing`, `narrativeAncillaryServices`, `regulatory`, `customerSignals`
-- `server/prompts.js` is the single source of truth; `src/data/defaultPrompts.js` mirrors for client Reset
-- Placeholders hint shown only on non-narrative tabs (`[TODAY DATE]`, `[CUTOFF DATE]`, `[SOURCE LIST]` etc. don't apply to narrative)
+WorkOS User Management with magic link email flow. No passwords.
+
+**Flow:**
+1. User visits any route → catch-all checks session cookie → redirects to `/auth/login` if missing
+2. User enters email on Login page → POST `/auth/magic-link` → WorkOS sends email with link
+3. User clicks link → WorkOS calls `APP_BASE_URL/auth/callback?code=...`
+4. Server exchanges code for user object → writes session to Redis (key `session:{uuid}`, TTL 7 days) → sets `eml_session` cookie → redirects to `/`
+5. `AuthGate.jsx` fetches `/api/auth/me` on mount → provides user via `AuthContext` → `useUser()` hook reads it
+
+**Access control:** Un-provisioned users (not in the WorkOS dashboard) get a 403 from `/auth/magic-link` and are redirected to `/auth/unauthorised`. To grant access: add the user in the WorkOS dashboard.
+
+**Session storage:** Redis at key `session:{sessionId}` with 7-day TTL. Falls back to in-memory Map when `REDIS_URL` is unset (development). Independent Redis connection in `auth.js` — does not share `researchCache.js`'s connection.
+
+**Cookie:** `eml_session` — httpOnly, SameSite=Strict, Secure only in production (`NODE_ENV=production`).
+
+**Profile avatar:** Cyan circle in the header showing the user's initial. Click → dropdown with email + Sign Out button. Sign Out hits `/auth/logout` which deletes the session and clears the cookie.
+
+**Server setup (manual, one-time):**
+1. Create a WorkOS account and organisation
+2. Enable "Magic Auth" in User Management → Authentication Methods
+3. Set Redirect URI to `{APP_BASE_URL}/auth/callback` (e.g. `https://energy-market-lens.up.railway.app/auth/callback`)
+4. Add users in User Management → Users (only listed users can authenticate)
+5. Copy `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` to env
 
 ---
 
@@ -481,7 +510,7 @@ Client-side defaults mirror these in `src/data/defaultPrompts.js` as `DEFAULT_NA
 
 **Sticky narrative sidebar with page scroll**: The right panel sticks in view as you scroll through charts. The page itself scrolls (not the charts panel), so the charts panel grows to its full content height. The sidebar uses `max-height` + `overflow-y: auto` so it never clips content — it scrolls internally only when the total content exceeds the viewport.
 
-**Per-section narrative agents**: Three independent Haiku calls (one per market section) replace a single combined call. Each section has its own prompt, cache namespace, stale indicator, and prompt editor tab. Sections can be regenerated and tuned independently — generating Day-Ahead does not bust or block the Balancing cache.
+**Per-section narrative agents**: Three independent Haiku calls (one per market section) replace a single combined call. Each section has its own cache namespace, stale indicator, and Generate button. Sections can be regenerated independently — generating Day-Ahead does not bust or block the Balancing cache.
 
 **Errors propagate to Claude**: `buildNarrativePayload()` sets `balancing` and `ancillaryServices` to `null` when their source data is empty. Each narrative prompt instructs Haiku to return the literal string `"null"` in that case; `callHaiku()` converts it to JS `null`, which renders as "No data available for this section." Never fabricates.
 
