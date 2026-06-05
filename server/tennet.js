@@ -166,28 +166,130 @@ export async function fetchAFRRData(startDate, endDate) {
 }
 
 // ── Balance Delta ─────────────────────────────────────────────────────────────
+//
+// Endpoint: GET /publications/v1/balance-delta-high-res
+// Rate limits: max 8 requests/day (historical), max range 4 hours per request
+// Timestamps: UTC, format DD-MM-YYYY HH:MM:SS
+// balanceDelta = Σ power_X_in  −  Σ power_X_out  (MW)
+
+// Format a JS Date as "DD-MM-YYYY HH:MM:SS" (UTC) for balance-delta params
+function tennetFmtUTCDatetime(d) {
+  const iso = d.toISOString() // "YYYY-MM-DDTHH:MM:SS.mmmZ"
+  const [y, m, day] = iso.slice(0, 10).split('-')
+  const time = iso.slice(11, 19)
+  return `${day}-${m}-${y} ${time}`
+}
+
+// Split [startDate, endDate] (inclusive, YYYY-MM-DD) into 4-hour UTC chunks.
+// Each element: { from: "DD-MM-YYYY HH:MM:SS", to: "DD-MM-YYYY HH:MM:SS" }
+function fourHourChunks(startDate, endDate) {
+  const chunks = []
+  const FOUR_HOURS_MS = 4 * 60 * 60 * 1000
+  let cur = new Date(startDate + 'T00:00:00Z')
+  const end = new Date(endDate + 'T00:00:00Z')
+  end.setUTCDate(end.getUTCDate() + 1) // day after endDate = exclusive boundary
+  while (cur < end) {
+    const next = new Date(Math.min(cur.getTime() + FOUR_HOURS_MS, end.getTime()))
+    chunks.push({ from: tennetFmtUTCDatetime(cur), to: tennetFmtUTCDatetime(next) })
+    cur = next
+  }
+  return chunks
+}
+
+// Generic request helper for endpoints that take pre-formatted UTC datetime strings.
+// Does NOT add +1 day. dateFrom/dateTo are "DD-MM-YYYY HH:MM:SS".
+async function tennetRequestRaw(endpoint, dateFrom, dateTo, attempt = 1) {
+  const key = process.env.TENNET_API_KEY
+  if (!key) throw new Error('TENNET_API_KEY not configured')
+
+  const url = new URL(`${TENNET_BASE}/${endpoint}`)
+  url.searchParams.set('date_from', dateFrom)
+  url.searchParams.set('date_to',   dateTo)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), TENNET_TIMEOUT_MS)
+
+  let res
+  try {
+    res = await fetch(url.toString(), {
+      headers: { apikey: key, Accept: 'application/json' },
+      signal: controller.signal,
+    })
+  } catch (err) {
+    clearTimeout(timer)
+    const isTimeout = err.name === 'AbortError'
+    const msg = isTimeout
+      ? `TenneT ${endpoint} timed out after ${TENNET_TIMEOUT_MS / 1000}s`
+      : `TenneT ${endpoint} network error: ${err.message}`
+    if (attempt < TENNET_MAX_RETRIES) {
+      const delay = TENNET_RETRY_BASE_MS * 2 ** (attempt - 1)
+      console.warn(`  ↺ ${msg} — retrying in ${delay}ms (attempt ${attempt}/${TENNET_MAX_RETRIES})`)
+      await new Promise(r => setTimeout(r, delay))
+      return tennetRequestRaw(endpoint, dateFrom, dateTo, attempt + 1)
+    }
+    throw new Error(`${msg} (all ${TENNET_MAX_RETRIES} attempts exhausted)`)
+  } finally {
+    clearTimeout(timer)
+  }
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    const err = new Error(`TenneT ${endpoint} ${res.status}: ${body.slice(0, 200)}`)
+    if (RETRYABLE_STATUSES.has(res.status) && attempt < TENNET_MAX_RETRIES) {
+      const delay = TENNET_RETRY_BASE_MS * 2 ** (attempt - 1)
+      console.warn(`  ↺ ${err.message} — retrying in ${delay}ms (attempt ${attempt}/${TENNET_MAX_RETRIES})`)
+      await new Promise(r => setTimeout(r, delay))
+      return tennetRequestRaw(endpoint, dateFrom, dateTo, attempt + 1)
+    }
+    throw err
+  }
+
+  return res.json()
+}
 
 function parseBalanceDeltaPoints(data) {
   const points = []
   for (const ts of data?.Response?.TimeSeries ?? []) {
-    for (const pt of ts?.Period?.Points ?? []) {
-      if (!pt.timeInterval_start) continue
-      const delta = pt.balance_delta ?? pt.balanceDelta ?? pt.imbalance ?? null
-      if (delta == null) continue
-      points.push({
-        timestamp:    pt.timeInterval_start,
-        balanceDelta: parseFloat(delta),
-      })
+    // Period is an array in the balance-delta-high-res response
+    for (const period of ts?.Period ?? []) {
+      for (const pt of period?.points ?? []) {
+        if (!pt.timeInterval_start) continue
+        const inPower = (parseFloat(pt.power_afrr_in    ?? 0)
+                       + parseFloat(pt.power_igcc_in    ?? 0)
+                       + parseFloat(pt.power_picasso_in ?? 0)
+                       + parseFloat(pt.power_mari_in    ?? 0)
+                       + parseFloat(pt.power_mfrrda_in  ?? 0))
+        const outPower = (parseFloat(pt.power_afrr_out    ?? 0)
+                        + parseFloat(pt.power_igcc_out    ?? 0)
+                        + parseFloat(pt.power_picasso_out ?? 0)
+                        + parseFloat(pt.power_mari_out    ?? 0)
+                        + parseFloat(pt.power_mfrrda_out  ?? 0))
+        points.push({
+          timestamp:    pt.timeInterval_start,
+          balanceDelta: +(inPower - outPower).toFixed(1),
+        })
+      }
     }
   }
   return points
 }
 
+// Max 8 requests/day to the historical endpoint. For ranges > 32 hours we trim
+// to the most recent 8 chunks (≈32 h) to stay within the daily rate limit.
+const MAX_BALANCE_DELTA_CHUNKS = 8
+
 export async function fetchBalanceDelta(startDate, endDate) {
-  const chunks = monthChunks(startDate, endDate)
+  let chunks = fourHourChunks(startDate, endDate)
+  if (chunks.length > MAX_BALANCE_DELTA_CHUNKS) {
+    console.warn(
+      `[TenneT] balance-delta: ${chunks.length} chunks needed for ${startDate}–${endDate} `
+      + `but daily limit is ${MAX_BALANCE_DELTA_CHUNKS}. Trimming to most recent ${MAX_BALANCE_DELTA_CHUNKS} chunks (~32 h).`
+    )
+    chunks = chunks.slice(-MAX_BALANCE_DELTA_CHUNKS)
+  }
   const all = []
   for (const { from, to } of chunks) {
-    const data = await tennetRequest('balance-delta', from, to)
+    const data = await tennetRequestRaw('balance-delta-high-res', from, to)
     all.push(...parseBalanceDeltaPoints(data))
   }
   if (!all.length) throw new Error('No balance delta data returned from TenneT')
@@ -195,18 +297,41 @@ export async function fetchBalanceDelta(startDate, endDate) {
 }
 
 // ── FRR Activations ───────────────────────────────────────────────────────────
+//
+// Endpoint: GET /publications/v1/frequency-restoration-reserve-activations
+// Rate limits: 1500/day — generous
+// Max range: 1 day per request → use day-by-day chunks
+// Response: ts.Period.Points[] (Period = object, Points = capital-P array)
+// Point fields: aFRR_up, aFRR_down, mfrrda_volume_up, mfrrda_volume_down,
+//               absolute_total_volume, timeInterval_start
+
+// Split [startDate, endDate] into individual calendar days.
+// tennetRequest adds +1 day so from="YYYY-MM-DD" to="YYYY-MM-DD" → 24h window. ✓
+function dayChunks(startDate, endDate) {
+  const chunks = []
+  let cur = startDate
+  while (cur <= endDate) {
+    chunks.push({ from: cur, to: cur })
+    cur = addDays(cur, 1)
+  }
+  return chunks
+}
 
 function parseFRRActivationPoints(data) {
   const points = []
   for (const ts of data?.Response?.TimeSeries ?? []) {
+    // Period is an object with a capital-P Points array
     for (const pt of ts?.Period?.Points ?? []) {
       if (!pt.timeInterval_start) continue
+      // aFRR + mFRR-DA volumes cover the main balancing energy activations
+      const upMw   = parseFloat(pt.aFRR_up          ?? 0)
+                   + parseFloat(pt.mfrrda_volume_up  ?? 0)
+      const downMw = parseFloat(pt.aFRR_down         ?? 0)
+                   + parseFloat(pt.mfrrda_volume_down ?? 0)
       points.push({
-        timestamp:         pt.timeInterval_start,
-        activatedUpMw:     parseFloat(pt.activated_up    ?? pt.frr_up    ?? 0),
-        activatedDownMw:   parseFloat(pt.activated_down  ?? pt.frr_down  ?? 0),
-        settledReserveMw:  parseFloat(pt.settled_reserve ?? 0),
-        emergencyEnergyMw: parseFloat(pt.emergency_energy ?? 0),
+        timestamp:       pt.timeInterval_start,
+        activatedUpMw:   +upMw.toFixed(1),
+        activatedDownMw: +downMw.toFixed(1),
       })
     }
   }
@@ -214,10 +339,11 @@ function parseFRRActivationPoints(data) {
 }
 
 export async function fetchFRRActivations(startDate, endDate) {
-  const chunks = monthChunks(startDate, endDate)
+  // Max 1 day per request — iterate day by day
+  const chunks = dayChunks(startDate, endDate)
   const all = []
   for (const { from, to } of chunks) {
-    const data = await tennetRequest('frr-activations', from, to)
+    const data = await tennetRequest('frequency-restoration-reserve-activations', from, to)
     all.push(...parseFRRActivationPoints(data))
   }
   if (!all.length) throw new Error('No FRR activation data returned from TenneT')
@@ -225,34 +351,45 @@ export async function fetchFRRActivations(startDate, endDate) {
 }
 
 // ── Merit Order ───────────────────────────────────────────────────────────────
+//
+// Endpoint: GET /publications/v1/merit-order-list
+// Rate limits: 600/day — need to be careful (24 req/day per daily fetch)
+// Max range: 1 hour per request → 24 hourly requests per day
+// Response: ts.Period.Points[] (Period = object, Points = capital-P array)
+// Point fields: isp (1–96 PTU number), timeInterval_start, timeInterval_end,
+//               Thresholds[] — each: { price_up, price_down, capacity_threshold }
+//
+// Supply curve: sort Thresholds by price_up ascending, accumulate capacity_threshold
+// to build { cumVolume (MAW), price (EUR/MWh) } pairs.
 
 function parseMeritOrderData(data, date) {
-  // Group bids by PTU (15-min interval 1–96)
-  const ptuBids = {}
+  const ptuBids = {} // isp → [{ priceUp, priceDown, capacity }]
   for (const ts of data?.Response?.TimeSeries ?? []) {
     for (const pt of ts?.Period?.Points ?? []) {
-      if (!pt.timeInterval_start) continue
-      const time  = pt.timeInterval_start.slice(11, 16) // "HH:MM"
-      const [h, m] = time.split(':').map(Number)
-      const ptu    = h * 4 + Math.floor(m / 15) + 1    // 1–96
-      const price  = parseFloat(pt.price ?? pt.bid_price ?? pt.marginal_price ?? 0)
-      const volume = parseFloat(pt.quantity ?? pt.volume ?? pt.bid_volume ?? 0)
-      if (!ptuBids[ptu]) ptuBids[ptu] = []
-      ptuBids[ptu].push({ price, volume })
+      const isp = pt.isp
+      if (!isp) continue
+      const thresholds = pt.Thresholds ?? []
+      for (const t of thresholds) {
+        const priceUp   = parseFloat(t.price_up          ?? 0)
+        const priceDown = parseFloat(t.price_down         ?? 0)
+        const capacity  = parseFloat(t.capacity_threshold ?? 0)
+        if (!ptuBids[isp]) ptuBids[isp] = []
+        ptuBids[isp].push({ priceUp, priceDown, capacity })
+      }
     }
   }
 
-  // Build supply curves per PTU (bids sorted ascending by price = supply curve)
+  // Build supply curves per PTU sorted by up-regulation price (ascending)
   const ptus = Object.entries(ptuBids)
     .sort(([a], [b]) => +a - +b)
     .map(([ptu, bids]) => {
-      const sorted = [...bids].sort((a, b) => a.price - b.price)
+      const sorted = [...bids].sort((a, b) => a.priceUp - b.priceUp)
       let cumVol = 0
       return {
         ptu: +ptu,
         curve: sorted.map(b => {
-          cumVol += b.volume
-          return { cumVolume: +cumVol.toFixed(1), price: +b.price.toFixed(2) }
+          cumVol += b.capacity
+          return { cumVolume: +cumVol.toFixed(1), price: +b.priceUp.toFixed(2) }
         }),
       }
     })
@@ -260,8 +397,38 @@ function parseMeritOrderData(data, date) {
   return { date, ptus }
 }
 
-// Fetch merit order for a single day (server route caches per day in Redis)
+// Generate 24 hourly UTC datetime pairs for a single date (YYYY-MM-DD).
+// Each: { from: "DD-MM-YYYY HH:00:00", to: "DD-MM-YYYY (HH+1):00:00" }
+function meritOrderHourlyChunks(date) {
+  const [y, m, d] = date.split('-')
+  const chunks = []
+  for (let h = 0; h < 24; h++) {
+    const hStr = String(h).padStart(2, '0')
+    let toStr
+    if (h === 23) {
+      // next day 00:00:00
+      const nd = new Date(date + 'T00:00:00Z')
+      nd.setUTCDate(nd.getUTCDate() + 1)
+      const [ny, nm, ndd] = nd.toISOString().slice(0, 10).split('-')
+      toStr = `${ndd}-${nm}-${ny} 00:00:00`
+    } else {
+      toStr = `${d}-${m}-${y} ${String(h + 1).padStart(2, '0')}:00:00`
+    }
+    chunks.push({ from: `${d}-${m}-${y} ${hStr}:00:00`, to: toStr })
+  }
+  return chunks
+}
+
+// Fetch merit order for a single day (server route caches per day in Redis).
+// Makes 24 hourly requests (max range = 1 hour per call).
 export async function fetchMeritOrderForDate(date) {
-  const data = await tennetRequest('merit-order', date, date)
-  return parseMeritOrderData(data, date)
+  const chunks = meritOrderHourlyChunks(date)
+  const allData = { Response: { TimeSeries: [] } }
+  for (const { from, to } of chunks) {
+    const data = await tennetRequestRaw('merit-order-list', from, to)
+    // Merge TimeSeries arrays from each hourly response
+    const ts = data?.Response?.TimeSeries ?? []
+    allData.Response.TimeSeries.push(...ts)
+  }
+  return parseMeritOrderData(allData, date)
 }
