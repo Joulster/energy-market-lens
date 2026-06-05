@@ -5,8 +5,8 @@ import dotenv       from 'dotenv'
 import { fileURLToPath } from 'url'
 import path         from 'path'
 import { traceable } from 'langsmith/traceable'
-import { fetchDayAheadPrices, fetchActualGeneration, fetchCapacityPrices } from './entso-e.js'
-import { fetchImbalancePrices, fetchAFRRData } from './tennet.js'
+import { fetchDayAheadPrices, fetchActualGeneration, fetchCapacityPrices, fetchDayAheadPricesForZone, MARKET_ZONES } from './entso-e.js'
+import { fetchImbalancePrices, fetchAFRRData, fetchBalanceDelta, fetchFRRActivations, fetchMeritOrderForDate } from './tennet.js'
 import { generateDayAheadNarrative, generateBalancingNarrative, generateAncillaryNarrative, generateRegulatoryWatch, generateCustomerSignals } from './claude.js'
 import { getCached, setCached } from './researchCache.js'
 import { authRouter, requireAuth, getSession } from './auth.js'
@@ -71,7 +71,7 @@ app.get('/api/day-ahead-prices', requireAuth, async (req, res) => {
 app.get('/api/actual-generation', requireAuth, async (req, res) => {
   const { startDate, endDate } = req.query
   await cachedMarketRoute(res, 'market:generation', startDate, endDate,
-    () => fetchActualGeneration(startDate, endDate))
+    () => fetchActualGeneration(startDate, endDate), 'v2|')
 })
 
 app.get('/api/imbalance-prices', requireAuth, async (req, res) => {
@@ -98,6 +98,44 @@ app.get('/api/afrr', requireAuth, async (req, res) => {
       fcrHourly:     entsoe.fcrHourly,    // ENTSO-E 4-h block FCR clearing price (symmetric)
     }
   }, 'v10|')
+})
+
+app.get('/api/balance-delta', requireAuth, async (req, res) => {
+  const { startDate, endDate } = req.query
+  await cachedMarketRoute(res, 'market:balance-delta', startDate, endDate,
+    () => fetchBalanceDelta(startDate, endDate))
+})
+
+app.get('/api/frr-activations', requireAuth, async (req, res) => {
+  const { startDate, endDate } = req.query
+  await cachedMarketRoute(res, 'market:frr-activations', startDate, endDate,
+    () => fetchFRRActivations(startDate, endDate))
+})
+
+// Merit order — per-day cache with 7-day TTL
+app.get('/api/merit-order', requireAuth, async (req, res) => {
+  const date = req.query.date ?? new Date().toISOString().slice(0, 10)
+  const cacheKey = `merit-order:${date}`
+  const hit = await getCached('merit-order', date)
+  if (hit) return res.json({ ok: true, data: hit.items, fromCache: true })
+  try {
+    const data = await fetchMeritOrderForDate(date)
+    await setCached('merit-order', date, data, 7 * 86400)
+    res.json({ ok: true, data })
+  } catch (err) {
+    console.error(`merit-order error for ${date}:`, err.message)
+    res.json({ ok: false, error: err.message, data: null })
+  }
+})
+
+// Cross-market DA prices for a single zone (DE, BE, FR)
+app.get('/api/cross-market-prices', requireAuth, async (req, res) => {
+  const { zone, startDate, endDate } = req.query
+  if (!zone || !MARKET_ZONES[zone]) {
+    return res.status(400).json({ ok: false, error: `zone must be one of: ${Object.keys(MARKET_ZONES).join(', ')}` })
+  }
+  await cachedMarketRoute(res, `market:cross:${zone}`, startDate, endDate,
+    () => fetchDayAheadPricesForZone(MARKET_ZONES[zone], startDate, endDate))
 })
 
 const NARRATIVE_TTL = 24 * 60 * 60 // 24 hours

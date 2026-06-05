@@ -1658,3 +1658,195 @@ body {
   background: #0f172a;
   color: #f1f5f9;
 }
+
+/* ── Cross-market toolbar controls ─────────────────────────────────────── */
+.toolbar-compare-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.market-select-wrapper {
+  position: relative;
+}
+
+.market-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.market-select-btn:hover,
+.market-select-btn.has-selection {
+  border-color: #6366f1;
+  color: #e2e8f0;
+}
+
+.market-select-chevron {
+  font-size: 10px;
+  margin-left: 2px;
+  opacity: 0.6;
+}
+
+.market-select-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 110px;
+  z-index: 200;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.market-select-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: #94a3b8;
+  font-size: 12px;
+  padding: 6px 8px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.market-select-option:hover {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.market-select-option.active {
+  color: #e2e8f0;
+}
+
+.market-select-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.market-select-check {
+  margin-left: auto;
+  font-size: 11px;
+  color: #4ade80;
+}
+
+.market-select-spinner {
+  margin-left: auto;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #334155;
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ── Merit order chart ──────────────────────────────────────────────────── */
+.merit-tightness {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.merit-date-selector {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.merit-nav-btn {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #94a3b8;
+  font-size: 14px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+
+.merit-nav-btn:hover:not(:disabled) {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.merit-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.merit-date-input {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  color: #e2e8f0;
+  font-size: 11px;
+  padding: 3px 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.merit-date-input:focus {
+  border-color: #6366f1;
+}
+
+.merit-scrubber-wrap {
+  padding: 8px 0 4px;
+}
+
+.merit-scrubber {
+  display: flex;
+  gap: 1px;
+  height: 12px;
+  margin: 0 12px;
+}
+
+.merit-ptu-slot {
+  flex: 1;
+  background: #1e293b;
+  border: none;
+  border-radius: 1px;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.08s;
+}
+
+.merit-ptu-slot:hover {
+  background: #334155;
+}
+
+.merit-ptu-slot.active {
+  background: #22d3ee;
+}
+
+.merit-scrubber-labels {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 12px 0;
+  font-size: 10px;
+  color: #475569;
+}

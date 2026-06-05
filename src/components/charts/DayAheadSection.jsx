@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  ComposedChart, LineChart, Line, BarChart, Bar,
+  ComposedChart, LineChart, Line, BarChart, Bar, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ReferenceLine, ReferenceArea,
   ResponsiveContainer,
 } from 'recharts'
@@ -24,6 +24,14 @@ function fmtCetDateTimeShort(iso) {
     hour: '2-digit',
     hour12: false,
   })
+}
+
+// Get CET date from any ts value (ISO UTC or plain date string)
+const AMS = 'Europe/Amsterdam'
+function cetDateFromTs(ts) {
+  if (!ts) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(ts)) return ts
+  return new Date(ts).toLocaleDateString('en-CA', { timeZone: AMS })
 }
 
 function RawPriceTooltip({ active, payload, label, resolution }) {
@@ -68,7 +76,10 @@ const RESOLUTIONS = [
   { key: '1d',  label: '1d'  },
 ]
 
-const AMS = 'Europe/Amsterdam'
+const GEN_RESOLUTIONS = [
+  { key: '1h', label: '1h' },
+  { key: '1d', label: '1d' },
+]
 
 function toAmsDate(ts) {
   return new Date(ts).toLocaleDateString('en-CA', { timeZone: AMS })
@@ -113,8 +124,6 @@ function aggregateHLA_1d(rawPoints) {
 
 // ── Range bar chart (High / Avg / Low) ────────────────────────────────────
 
-// Custom Bar shape: thin range bar low→high, bright tick at average.
-// Recharts positions y=pixel(high), y+height=pixel(low) via range dataKey.
 function HLABar({ x, y, width, height, high, low, avg }) {
   if (!height || high === low) return null
   const avgPx  = y + height * (high - avg) / (high - low)
@@ -123,13 +132,9 @@ function HLABar({ x, y, width, height, high, low, avg }) {
   const tickW  = Math.max(width * 0.85, 3)
   return (
     <g>
-      {/* Low-to-high range spine */}
       <rect x={midX - barW / 2} y={y} width={barW} height={height} fill="#1e3a5f" rx={1} />
-      {/* High cap */}
       <rect x={x + (width - tickW) / 2} y={y} width={tickW} height={2} fill="#7dd3fc" rx={1} />
-      {/* Low cap */}
       <rect x={x + (width - tickW) / 2} y={y + height - 2} width={tickW} height={2} fill="#475569" rx={1} />
-      {/* Average tick */}
       <rect x={x + (width - tickW) / 2} y={avgPx - 1.5} width={tickW} height={3} fill={COLORS.cyan} rx={1} />
     </g>
   )
@@ -173,10 +178,6 @@ function fmtRangeDate(iso) {
   return new Date(iso + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 }
 
-// text === undefined  → not yet generated
-// text === null       → Claude returned null (data unavailable)
-// text === string     → show the text
-// isStale             → dates have changed since generation; show amber warning
 function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, lastGenerated }) {
   const hasResult  = text !== undefined
   const rangeLabel = generatedDates
@@ -219,11 +220,20 @@ function SummaryBlock({ text, loading, onGenerate, isStale, generatedDates, last
 
 // ── Section ────────────────────────────────────────────────────────────────
 
-export default function DayAheadSection({ dayAhead, errors, startDate, endDate, narrative, loading, onGenerate, isStale, generatedDates, lastGenerated, dataLoading, compareEnabled, compareData, compareDates }) {
+export default function DayAheadSection({
+  dayAhead, generation, errors,
+  startDate, endDate,
+  narrative, loading, onGenerate, isStale, generatedDates, lastGenerated,
+  dataLoading, genLoading,
+  compareEnabled, compareData, compareDates,
+  selectedMarkets, crossMarketData, marketColors,
+}) {
   const [resolution, setResolution] = useState('15m')
+  const [genRes,     setGenRes]     = useState('1h')
 
   const lgd0 = useLegendToggle()   // Day-Ahead price chart
   const lgd1 = useLegendToggle()   // Negative hours chart
+  const lgd2 = useLegendToggle()   // Generation mix chart
 
   const inRange     = d => (!startDate              || d >= startDate)              && (!endDate              || d <= endDate)
   const inPrevRange = d => (!compareDates?.startDate || d >= compareDates.startDate) && (!compareDates?.endDate || d <= compareDates.endDate)
@@ -240,10 +250,7 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
     : aggregateHLA_1d(rawPoints)
 
   const prevRawPoints = compareEnabled
-    ? (compareData?.dayAhead?.rawPoints ?? []).filter(p => {
-        const d = p.ts?.slice(0, 10)
-        return inPrevRange(d)
-      }).map(p => ({ ts: p.ts, price: p.price }))
+    ? (compareData?.dayAhead?.rawPoints ?? []).filter(p => inPrevRange(p.ts?.slice(0, 10))).map(p => ({ ts: p.ts, price: p.price }))
     : []
 
   const prevChartData = compareEnabled
@@ -252,25 +259,48 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
       : aggregateHLA_1d(prevRawPoints))
     : []
 
-  // 15m: merge prevPrice for line compare; 1h/1d: merge prevHigh/Avg/Low for range bar compare
-  const mergedChartData = resolution === '15m'
-    ? chartData.map((d, i) => ({ ...d, prevPrice: prevChartData[i]?.price }))
-    : chartData.map((d, i) => ({
-        ...d,
-        prevHigh: prevChartData[i]?.high,
-        prevAvg:  prevChartData[i]?.avg,
-        prevLow:  prevChartData[i]?.low,
-      }))
+  // ── Cross-market: build date-keyed lookup ──────────────────────────────────
+  // { 'YYYY-MM-DD': { DE: avgPrice, BE: avgPrice, FR: avgPrice } }
+  const cmByDate = {}
+  for (const zone of (selectedMarkets || [])) {
+    const zd = crossMarketData?.[zone]
+    if (!zd) continue
+    for (const { date, avg } of zd.dailyAvg ?? []) {
+      if (!cmByDate[date]) cmByDate[date] = {}
+      cmByDate[date][zone] = avg
+    }
+  }
 
-  // Y-axis domain for HLA bars — covers current high/low range + prev avg when compare is on
+  // Merge prev and cross-market into chart data
+  const mergedChartData = resolution === '15m'
+    ? chartData.map((d, i) => {
+        const date = cetDateFromTs(d.ts)
+        const cm = cmByDate[date] ?? {}
+        return { ...d, prevPrice: prevChartData[i]?.price, deAvg: cm.DE ?? null, beAvg: cm.BE ?? null, frAvg: cm.FR ?? null }
+      })
+    : chartData.map((d, i) => {
+        const date = cetDateFromTs(d.ts)
+        const cm = cmByDate[date] ?? {}
+        return {
+          ...d,
+          prevHigh: prevChartData[i]?.high,
+          prevAvg:  prevChartData[i]?.avg,
+          prevLow:  prevChartData[i]?.low,
+          deAvg: cm.DE ?? null,
+          beAvg: cm.BE ?? null,
+          frAvg: cm.FR ?? null,
+        }
+      })
+
+  // Y-axis domain for HLA bars
   const hlaDomain = (() => {
     if (!isCandlestick || !chartData.length) return ['auto', 'auto']
-    const lows    = chartData.map(d => d.low).filter(v => v != null)
-    const highs   = chartData.map(d => d.high).filter(v => v != null)
+    const lows     = chartData.map(d => d.low).filter(v => v != null)
+    const highs    = chartData.map(d => d.high).filter(v => v != null)
     const prevAvgs = compareEnabled ? prevChartData.map(d => d.avg).filter(v => v != null) : []
-    const minV  = Math.min(...lows,  ...prevAvgs)
-    const maxV  = Math.max(...highs, ...prevAvgs)
-    const pad   = (maxV - minV) * 0.06
+    const minV = Math.min(...lows, ...prevAvgs)
+    const maxV = Math.max(...highs, ...prevAvgs)
+    const pad  = (maxV - minV) * 0.06
     return [minV - pad, maxV + pad]
   })()
 
@@ -280,11 +310,61 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
   const isMock = !!errors?.dayAhead
 
   const prevNegHours = compareEnabled ? (compareData?.dayAhead?.negativeHoursPerWeek ?? []).filter(d => inPrevRange(d.week)) : []
-
   const mergedNegHours = negHoursData.map((d, i) => ({ ...d, prevCount: prevNegHours[i]?.count }))
 
+  // ── Generation mix data ───────────────────────────────────────────────────
+  const isMockGen = !generation && !genLoading
+
+  const genMixData = (() => {
+    if (!generation) return []
+    if (genRes === '1h') {
+      // Merge solarHourly + windHourly by timestamp; join DA hourly avg
+      const daHourlyMap = {}
+      for (const { date, hour, avg } of dayAhead?.hourlyHLA ?? []) {
+        if (inRange(date)) daHourlyMap[`${date}T${String(hour).padStart(2, '0')}:00`] = avg
+      }
+      const solarMap = {}
+      for (const { timestamp, mw } of generation.solarHourly ?? []) {
+        if (inRange(timestamp.slice(0, 10))) solarMap[timestamp] = mw
+      }
+      const windMap = {}
+      for (const { timestamp, mw } of generation.windHourly ?? []) {
+        if (inRange(timestamp.slice(0, 10))) windMap[timestamp] = mw
+      }
+      const allTs = new Set([...Object.keys(solarMap), ...Object.keys(windMap)])
+      return [...allTs].sort().map(ts => ({
+        ts,
+        solar: solarMap[ts] ?? null,
+        wind:  windMap[ts]  ?? null,
+        price: daHourlyMap[ts] ?? null,
+      }))
+    } else {
+      // 1d — daily avg MW; join DA daily avg
+      const daMap = {}
+      for (const { date, avg } of dayAhead?.dailyHLA ?? []) {
+        if (inRange(date)) daMap[date] = avg
+      }
+      const solarMap = {}
+      for (const { date, avg } of generation.solar ?? []) {
+        if (inRange(date)) solarMap[date] = avg
+      }
+      const windMap = {}
+      for (const { date, avg } of generation.wind ?? []) {
+        if (inRange(date)) windMap[date] = avg
+      }
+      const allDates = new Set([...Object.keys(solarMap), ...Object.keys(windMap)])
+      return [...allDates].sort().map(date => ({
+        ts: date,
+        solar: solarMap[date] ?? null,
+        wind:  windMap[date]  ?? null,
+        price: daMap[date] ?? null,
+      }))
+    }
+  })()
+
   const zoom0 = useZoom(mergedChartData, 'ts')
-  const zoom1 = useZoom(mergedNegHours, 'week')
+  const zoom1 = useZoom(mergedNegHours,  'week')
+  const zoom2 = useZoom(genMixData,      'ts')
 
   const resolutionControls = (
     <div className="range-selector chart-resolution-selector">
@@ -300,10 +380,25 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
     </div>
   )
 
+  const genResControls = (
+    <div className="range-selector chart-resolution-selector">
+      {GEN_RESOLUTIONS.map(r => (
+        <button
+          key={r.key}
+          className={`range-option${genRes === r.key ? ' active' : ''}`}
+          onClick={() => { setGenRes(r.key); zoom2.reset() }}
+        >
+          {r.label}
+        </button>
+      ))}
+    </div>
+  )
+
   return (
     <section className="asset-section">
       <h2 className="section-title">Day-Ahead</h2>
 
+      {/* ── DA Price chart ─────────────────────────────────────────────── */}
       <ChartWrap title="Day-Ahead Price NL (EUR/MWh)" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} error={errors?.dayAhead} controls={resolutionControls} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={220}>
           {isCandlestick ? (
@@ -316,12 +411,22 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
               <Legend {...lgd0.legendProps} />
               <Bar dataKey={d => [d.low, d.high]} shape={<HLABar />} isAnimationActive={false} name="DA Price H/L/Avg" hide={lgd0.isHidden('DA Price H/L/Avg')} />
               {compareEnabled && <Line type="monotone" dataKey="prevAvg" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Previous period avg" hide={lgd0.isHidden('Previous period avg')} isAnimationActive={false} />}
+              {/* Cross-market overlays (daily avg) */}
+              {(selectedMarkets || []).includes('DE') && crossMarketData?.DE && (
+                <Line type="monotone" dataKey="deAvg" stroke={marketColors?.DE ?? '#fbbf24'} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd0.isHidden('DE avg')} isAnimationActive={false} />
+              )}
+              {(selectedMarkets || []).includes('BE') && crossMarketData?.BE && (
+                <Line type="monotone" dataKey="beAvg" stroke={marketColors?.BE ?? '#a78bfa'} dot={false} strokeWidth={1.5} name="BE avg" hide={lgd0.isHidden('BE avg')} isAnimationActive={false} />
+              )}
+              {(selectedMarkets || []).includes('FR') && crossMarketData?.FR && (
+                <Line type="monotone" dataKey="frAvg" stroke={marketColors?.FR ?? '#fb7185'} dot={false} strokeWidth={1.5} name="FR avg" hide={lgd0.isHidden('FR avg')} isAnimationActive={false} />
+              )}
               {zoom0.refArea.left && zoom0.refArea.right && (
                 <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
               )}
             </ComposedChart>
           ) : (
-            <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
+            <ComposedChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
               <XAxis dataKey="ts" tickFormatter={fmtCetDateTimeShort} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
               <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={['auto', 'auto']} tickFormatter={v => Number(v).toFixed(2)} />
@@ -330,14 +435,24 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
               <Legend {...lgd0.legendProps} />
               <Line type="monotone" dataKey="price" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} name="DA Price (EUR/MWh)" hide={lgd0.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
               {compareEnabled && <Line type="monotone" dataKey="prevPrice" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd0.isHidden('Prev. period')} isAnimationActive={false} />}
+              {(selectedMarkets || []).includes('DE') && crossMarketData?.DE && (
+                <Line type="monotone" dataKey="deAvg" stroke={marketColors?.DE ?? '#fbbf24'} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd0.isHidden('DE avg')} isAnimationActive={false} />
+              )}
+              {(selectedMarkets || []).includes('BE') && crossMarketData?.BE && (
+                <Line type="monotone" dataKey="beAvg" stroke={marketColors?.BE ?? '#a78bfa'} dot={false} strokeWidth={1.5} name="BE avg" hide={lgd0.isHidden('BE avg')} isAnimationActive={false} />
+              )}
+              {(selectedMarkets || []).includes('FR') && crossMarketData?.FR && (
+                <Line type="monotone" dataKey="frAvg" stroke={marketColors?.FR ?? '#fb7185'} dot={false} strokeWidth={1.5} name="FR avg" hide={lgd0.isHidden('FR avg')} isAnimationActive={false} />
+              )}
               {zoom0.refArea.left && zoom0.refArea.right && (
                 <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
               )}
-            </LineChart>
+            </ComposedChart>
           )}
         </ResponsiveContainer>
       </ChartWrap>
 
+      {/* ── Negative hours chart ──────────────────────────────────────── */}
       <ChartWrap title="Negative Price Hours per Week NL" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} error={errors?.dayAhead} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
@@ -352,6 +467,43 @@ export default function DayAheadSection({ dayAhead, errors, startDate, endDate, 
               <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
             )}
           </BarChart>
+        </ResponsiveContainer>
+      </ChartWrap>
+
+      {/* ── Generation Mix chart ──────────────────────────────────────── */}
+      <ChartWrap
+        title="Generation Mix NL — Solar & Wind (MW)"
+        source="ENTSO-E"
+        isMock={isMockGen}
+        isLoading={genLoading}
+        controls={genResControls}
+        zoomed={zoom2.isZoomed}
+        onReset={zoom2.reset}
+      >
+        <ResponsiveContainer width="100%" height={200}>
+          <ComposedChart data={zoom2.displayData} margin={{ top: 8, right: 48, left: 0, bottom: 4 }} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+            <XAxis
+              dataKey="ts"
+              tickFormatter={v => genRes === '1d' ? fmtDate(v) : fmtCetDateTimeShort(v)}
+              tick={{ fill: '#94a3b8', fontSize: 11 }}
+              minTickGap={60}
+            />
+            {/* Left Y — generation MW */}
+            <YAxis yAxisId="gen" orientation="left" width={48} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={v => `${Math.round(v)}`} />
+            {/* Right Y — DA price EUR/MWh */}
+            <YAxis yAxisId="price" orientation="right" width={48} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => v != null ? Number(v).toFixed(0) : ''} />
+            <Tooltip content={<CompareTooltip />} />
+            <Legend {...lgd2.legendProps} />
+            {/* Stacked areas: solar bottom, wind on top */}
+            <Area yAxisId="gen" type="monotone" dataKey="solar" stackId="gen" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.35} dot={false} name="Solar (MW)" hide={lgd2.isHidden('Solar (MW)')} isAnimationActive={false} />
+            <Area yAxisId="gen" type="monotone" dataKey="wind"  stackId="gen" stroke="#6b8db5" fill="#6b8db5" fillOpacity={0.35} dot={false} name="Wind (MW)"  hide={lgd2.isHidden('Wind (MW)')}  isAnimationActive={false} />
+            {/* DA price line on right axis */}
+            <Line yAxisId="price" type="monotone" dataKey="price" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeOpacity={0.6} name="DA Price (EUR/MWh)" hide={lgd2.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
+            {zoom2.refArea.left && zoom2.refArea.right && (
+              <ReferenceArea yAxisId="gen" x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+            )}
+          </ComposedChart>
         </ResponsiveContainer>
       </ChartWrap>
 

@@ -24,10 +24,12 @@ async function apiFetch(path) {
 }
 
 const SOURCE_ENDPOINTS = {
-  dayAhead:   '/api/day-ahead-prices',
-  generation: '/api/actual-generation',
-  imbalance:  '/api/imbalance-prices',
-  afrr:       '/api/afrr',
+  dayAhead:      '/api/day-ahead-prices',
+  generation:    '/api/actual-generation',
+  imbalance:     '/api/imbalance-prices',
+  afrr:          '/api/afrr',
+  balanceDelta:  '/api/balance-delta',
+  frrActivations:'/api/frr-activations',
 }
 
 // Fetch a single data source. Used by App for independent per-chart loading.
@@ -87,6 +89,21 @@ export async function fetchSectionNarrative(section, fullPayload, systemPrompt, 
   } catch (err) {
     return { ok: false, narrative: null, error: err.message }
   }
+}
+
+// Fetch DA prices for a cross-market zone (DE, BE, FR).
+// Returns { ok, data: { dailyAvg, hourlyAvg }, error }
+export async function fetchCrossMarketPrices(zone, startDate, endDate) {
+  const qs = startDate && endDate ? `?zone=${zone}&startDate=${startDate}&endDate=${endDate}` : `?zone=${zone}`
+  const res = await apiFetch(`/api/cross-market-prices${qs}`)
+  return { data: res.data ?? null, error: res.ok ? null : res.error }
+}
+
+// Fetch merit order for a single day.
+// date: 'YYYY-MM-DD'
+export async function fetchMeritOrderDay(date) {
+  const res = await apiFetch(`/api/merit-order?date=${date}`)
+  return { data: res.data ?? null, error: res.ok ? null : res.error }
 }
 
 export function buildNarrativePayload(data, startDate, endDate) {

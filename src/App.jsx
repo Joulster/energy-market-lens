@@ -46,12 +46,12 @@ function Avatar() {
 }
 
 export default function App() {
-  const EMPTY_DATA = { dayAhead: null, generation: null, imbalance: null, afrr: null,
-                        errors: { dayAhead: null, generation: null, imbalance: null, afrr: null } }
-  const SOURCES = ['dayAhead', 'generation', 'imbalance', 'afrr']
+  const EMPTY_DATA = { dayAhead: null, generation: null, imbalance: null, afrr: null, balanceDelta: null, frrActivations: null,
+                        errors: { dayAhead: null, generation: null, imbalance: null, afrr: null, balanceDelta: null, frrActivations: null } }
+  const SOURCES = ['dayAhead', 'generation', 'imbalance', 'afrr', 'balanceDelta', 'frrActivations']
 
   const [marketData,   setMarketData]   = useState(EMPTY_DATA)
-  const [dataLoading,  setDataLoading]  = useState({ dayAhead: true, generation: true, imbalance: true, afrr: true })
+  const [dataLoading,  setDataLoading]  = useState({ dayAhead: true, generation: true, imbalance: true, afrr: true, balanceDelta: true, frrActivations: true })
   const [selectedRange, setSelectedRange] = useState('90d')
   const [leftWidth,    setLeftWidth]    = useState(50)
   const [resizerTip,   setResizerTip]   = useState({ visible: false, x: 0, y: 0 })
@@ -76,7 +76,7 @@ export default function App() {
 
   useEffect(() => {
     setMarketData(EMPTY_DATA)
-    setDataLoading({ dayAhead: true, generation: true, imbalance: true, afrr: true })
+    setDataLoading({ dayAhead: true, generation: true, imbalance: true, afrr: true, balanceDelta: true, frrActivations: true })
     const { startDate, endDate } = computeDates(selectedRange)
     for (const source of SOURCES) {
       loadSourceData(source, startDate, endDate).then(({ data, error }) => {

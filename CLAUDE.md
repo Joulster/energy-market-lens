@@ -88,21 +88,37 @@ src/
 **Layout:** Fixed header, then a resizable flex row — charts panel (left, default 75%, grows to full content height) + narrative panel (right, default 25%, sticky with max-height). A draggable 1px separator between them allows custom splits. The page itself scrolls; `.app-body` is no longer `overflow: hidden`.
 
 **Data flow:**
-1. `App.jsx` calls `loadSourceData()` independently for each of the 4 sources — no blocking `Promise.all`
-2. `dataLoading` state (`{ dayAhead, generation, imbalance, afrr }`) is tracked per source and passed down
+1. `App.jsx` calls `loadSourceData()` independently for each of the 6 sources — no blocking `Promise.all`
+   - Sources: `dayAhead`, `generation`, `imbalance`, `afrr`, `balanceDelta`, `frrActivations`
+2. `dataLoading` state (`{ dayAhead, generation, imbalance, afrr, balanceDelta, frrActivations }`) is tracked per source and passed down
 3. Each chart section renders immediately with a skeleton, flipping to live data as its source resolves
-4. `loadAllMarketData()` is still used by the compare-period feature (needs all 4 sources together)
-5. Each section has its own Generate button — `ChartsPanel` calls `buildNarrativePayload()` once, then `fetchSectionNarrative(section, fullPayload, ...)` for that section only
-6. Regulatory Watch and Customer Signals call their own endpoints independently
+4. `loadAllMarketData()` is still used by the compare-period feature (needs all core sources together)
+5. Cross-market data (`crossMarketData`) is fetched in `ChartsPanel` when zones are selected — one `fetchCrossMarketPrices(zone, startDate, endDate)` call per zone, independent
+6. Merit order is fetched inside `MeritOrderChart` (self-contained component in AncillaryServicesSection) — one day at a time via `fetchMeritOrderDay(date)`
+7. Each section has its own Generate button — `ChartsPanel` calls `buildNarrativePayload()` once, then `fetchSectionNarrative(section, fullPayload, ...)` for that section only
+8. Regulatory Watch and Customer Signals call their own endpoints independently
 
-**Compare previous period:**
-- Checkbox in the date range toolbar ("Compare previous period")
+**Two-control compare toolbar** (replaces single previous-period toggle):
+
+*Control 1 — Previous Period toggle:*
+- Checkbox in the date range toolbar ("Prev. period")
 - When enabled, `computePrevDates(rangeKey)` calculates the equivalent prior period
 - `loadAllMarketData()` is called again for the previous period dates
-- Previous series are overlaid as dashed/faded lines on all charts
+- Previous series are overlaid as dashed/faded lines on all charts that support it
 - `CompareTooltip` in `shared.jsx` shows current value + delta (coloured green/red) on hover
 - Prev data keys follow `prev + capitalise(key)` convention (e.g. `avg` → `prevAvg`)
 - DayAheadSection compare works across all resolutions (15m, 1h, 1d) — previous period is index-aligned
+
+*Control 2 — Add Market multi-select:*
+- Dropdown button ("Add Market") in the toolbar, next to the Previous Period toggle
+- Options: DE, BE, FR — each independently toggleable, multiple can be active simultaneously
+- Bidding zone codes: DE=`10Y1001A1001A82H`, BE=`10YBE----------2`, FR=`10YFR-RTE------C`
+- Colours: DE amber `#fbbf24`, BE purple `#a78bfa`, FR rose `#fb7185`
+- Fetches `/api/cross-market-prices?zone=XX&startDate=...&endDate=...` for each selected zone
+- `crossMarketData` in ChartsPanel: `{ DE: {dailyAvg, hourlyAvg}, BE: {...}, FR: {...} }`
+- **Overlaid on**: Day-Ahead price chart (all resolutions, as daily-avg lines) and FCR Capacity chart
+- **Not shown on**: Balancing, aFRR capacity, aFRR energy — absence is natural, no indicator
+- When no markets selected: button shows no selection state, no legend entries added to charts
 
 ### Backend (`server/`)
 
@@ -110,8 +126,8 @@ src/
 server/
   index.js         # Express app, all routes, static file serving; fail-fast on missing auth env vars
   auth.js          # WorkOS magic link flow: authRouter (5 routes) + requireAuth middleware + getSession helper
-  entso-e.js       # ENTSO-E Transparency Platform API (A44, A75, A81/B95 for aFRR+FCR capacity)
-  tennet.js        # TenneT REST API — imbalance midprice + aFRR energy prices (settlement-prices endpoint)
+  entso-e.js       # ENTSO-E Transparency Platform API (A44, A75, A81/B95 for aFRR+FCR capacity + cross-market)
+  tennet.js        # TenneT REST API — settlement-prices + balance-delta + frr-activations + merit-order
   claude.js        # generateDayAheadNarrative(), generateBalancingNarrative(), generateAncillaryNarrative(),
                    # generateRegulatoryWatch(), generateCustomerSignals(), callHaiku() shared helper
   prompts.js       # Central store for all 5 system prompts + PROMPT_VERSIONS for LangSmith filtering
@@ -120,20 +136,24 @@ server/
 ```
 
 **Routes:**
-| Method | Path | Source | Status |
-|---|---|---|---|
-| GET | `/health` | — | ✅ Healthcheck |
-| POST | `/auth/magic-link` | WorkOS createMagicAuth | ✅ Live |
-| GET | `/auth/callback` | WorkOS authenticateWithCode | ✅ Live |
-| GET | `/auth/logout` | Session delete + cookie clear | ✅ Live |
-| GET | `/api/auth/me` | Session lookup | ✅ Live |
-| GET | `/api/day-ahead-prices` | ENTSO-E A44 | ✅ Live |
-| GET | `/api/actual-generation` | ENTSO-E A75 | ✅ Live |
-| GET | `/api/imbalance-prices` | TenneT settlement-prices | ✅ Live |
-| GET | `/api/afrr` | TenneT (energy) + ENTSO-E A81/B95 (capacity) | ✅ Live |
-| POST | `/api/narrative` | Claude Haiku 4.5 | ✅ Live |
-| POST | `/api/regulatory` | Claude Sonnet 4.6 + web_search | ✅ Live |
-| POST | `/api/customer-signals` | Claude Sonnet 4.6 + web_search | ✅ Live |
+| Method | Path | Source | Cache TTL | Status |
+|---|---|---|---|---|
+| GET | `/health` | — | — | ✅ Healthcheck |
+| POST | `/auth/magic-link` | WorkOS createMagicAuth | — | ✅ Live |
+| GET | `/auth/callback` | WorkOS authenticateWithCode | — | ✅ Live |
+| GET | `/auth/logout` | Session delete + cookie clear | — | ✅ Live |
+| GET | `/api/auth/me` | Session lookup | — | ✅ Live |
+| GET | `/api/day-ahead-prices` | ENTSO-E A44 NL | 1h/24h | ✅ Live |
+| GET | `/api/actual-generation` | ENTSO-E A75 NL | 1h/24h | ✅ Live |
+| GET | `/api/imbalance-prices` | TenneT settlement-prices | 1h/24h | ✅ Live |
+| GET | `/api/afrr` | TenneT (energy) + ENTSO-E A81/B95 (capacity) | 1h/24h | ✅ Live |
+| GET | `/api/balance-delta` | TenneT balance-delta | 1h/24h | ✅ Live |
+| GET | `/api/frr-activations` | TenneT frr-activations | 1h/24h | ✅ Live |
+| GET | `/api/merit-order?date=YYYY-MM-DD` | TenneT merit-order | 7 days | ✅ Live |
+| GET | `/api/cross-market-prices?zone=DE\|BE\|FR` | ENTSO-E A44 (other zones) | 1h/24h | ✅ Live |
+| POST | `/api/narrative` | Claude Haiku 4.5 | 24h | ✅ Live |
+| POST | `/api/regulatory` | Claude Sonnet 4.6 + web_search | Monthly | ✅ Live |
+| POST | `/api/customer-signals` | Claude Sonnet 4.6 + web_search | Monthly | ✅ Live |
 
 All non-auth `GET` routes serve `dist/index.html`; the catch-all redirects to `/auth/login` if no valid session is found (except `/auth/*` paths which are passed through directly).
 
@@ -143,8 +163,15 @@ All non-auth `GET` routes serve `dist/index.html`; the catch-all redirects to `/
 
 ### ENTSO-E (`server/entso-e.js`)
 
-- **Day-ahead prices** — document type A44, NL bidding zone `10YNL----------L`
+- **Day-ahead prices NL** — document type A44, NL bidding zone `10YNL----------L`
+- **Cross-market day-ahead prices** — same A44 document type, different bidding zones:
+  - DE: `10Y1001A1001A82H` | BE: `10YBE----------2` | FR: `10YFR-RTE------C`
+  - `fetchDayAheadPricesForZone(zone, startDate, endDate)` → `{ dailyAvg, hourlyAvg }` (CET timestamps)
+  - `MARKET_ZONES` export maps zone codes: `{ DE, BE, FR }`
 - **Actual generation** — document type A75, NL area, B19 (solar), B16/B18 (wind)
+  - Now returns hourly data alongside daily: `{ solar, wind, solarHourly, windHourly }`
+  - `solarHourly`/`windHourly`: `[{ timestamp: 'YYYY-MM-DDTHH:00' (CET), mw }]`
+  - Cache salt bumped to `v2|` to bust old daily-only cached responses
 - **Capacity prices** — document type A81/B95 (contracted reserves / procured capacity):
   - **aFRR** — `type_MarketAgreement.Type = A13` (4-hour block agreement). Returns a ZIP containing one XML per CET delivery day. Chunked in 8-day batches to stay under the 100-TimeSeries-per-request limit (12 series/day × 8 days = 96 < 100). Directions: `A01` = Up, `A02` = Down.
   - **FCR** — `type_MarketAgreement.Type = A01` (symmetric, 4-hour blocks). Chunked in 14-day batches (6 series/day × 14 days = 84 < 100).
@@ -153,14 +180,19 @@ All non-auth `GET` routes serve `dist/index.html`; the catch-all redirects to `/
 
 ### TenneT (`server/tennet.js`)
 
-- **Endpoint:** `https://api.tennet.eu/publications/v1/settlement-prices`
+- **Base URL:** `https://api.tennet.eu/publications/v1`
 - **Auth:** `apikey` header with `TENNET_API_KEY`
 - **Date format:** API expects `DD-MM-YYYY 00:00:00`; uses exclusive end date (add 1 day to the inclusive endDate)
 - **Rate limiting:** chunked into 1-month batches (API max range)
 - **Retry logic:** 3 attempts with exponential backoff; retries on 429/500/502/503/504 and timeouts
-- **Response:** 15-minute ISP resolution with CET local timestamps (`timeInterval_start`), fields `dispatch_up` and `dispatch_down`
-- **`fetchImbalancePrices`** — returns `{ daily, rawPoints }`: daily = daily average mid price; rawPoints = full 15-min ISP points with `{ timestamp, midPrice }` for frontend hourly aggregation. Cache salt `v2|` to bust old daily-only cached responses.
-- **`fetchAFRRData`** — returns raw 15-min points with `{ timestamp, afrrUpEnergyPrice, afrrDownEnergyPrice }` so the frontend can aggregate at 15m / 1h / 1d
+- **Response:** 15-minute ISP resolution with CET local timestamps (`timeInterval_start`)
+
+**Fetchers:**
+- **`fetchImbalancePrices`** — settlement-prices → `{ daily, rawPoints }`. daily = daily avg mid price; rawPoints = 15-min `{ timestamp, midPrice }`. Cache salt `v2|`.
+- **`fetchAFRRData`** — settlement-prices → raw 15-min `{ timestamp, afrrUpEnergyPrice, afrrDownEnergyPrice }` (dispatch_up / dispatch_down)
+- **`fetchBalanceDelta`** — balance-delta endpoint → `[{ timestamp, balanceDelta (MW) }]`. Positive = system long, negative = system short. 15-min resolution. Cache: 1h/24h TTL.
+- **`fetchFRRActivations`** — frr-activations endpoint → `[{ timestamp, activatedUpMw, activatedDownMw, settledReserveMw, emergencyEnergyMw }]`. 15-min resolution. Cache: 1h/24h TTL.
+- **`fetchMeritOrderForDate(date)`** — merit-order endpoint (single day) → `{ date, ptus: [{ ptu: 1-96, curve: [{ cumVolume, price }] }] }`. Bids sorted ascending by price (supply curve). PTU 1 = 00:00, PTU 96 = 23:45. Cache: Redis key `merit-order:{YYYY-MM-DD}`, 7-day TTL.
 
 ### `/api/afrr` route
 
@@ -174,6 +206,34 @@ Combines both sources and returns:
 ```
 
 Cache salt is versioned (currently `v10|`) — bump to bust Redis when the response shape changes.
+
+### `/api/balance-delta` route
+
+Returns: `[{ timestamp: 'YYYY-MM-DDTHH:MM:SS' (CET), balanceDelta: number (MW) }]`
+
+Cache namespace: `market:balance-delta`. TTL: 1h for ranges including today, 24h for historical.
+
+### `/api/frr-activations` route
+
+Returns: `[{ timestamp, activatedUpMw, activatedDownMw, settledReserveMw, emergencyEnergyMw }]`
+
+Cache namespace: `market:frr-activations`. TTL: 1h/24h.
+
+### `/api/merit-order` route
+
+Query param: `date=YYYY-MM-DD` (defaults to today).
+
+Returns: `{ date, ptus: [{ ptu: 1-96, curve: [{ cumVolume: number, price: number }] }] }`
+
+Cache: individual Redis keys `merit-order:{YYYY-MM-DD}`, 7-day TTL (historical merit order data never changes). The frontend requests one day at a time — no date range batching needed.
+
+### `/api/cross-market-prices` route
+
+Query params: `zone=DE|BE|FR`, `startDate`, `endDate`.
+
+Returns: `{ dailyAvg: [{ date, avg }], hourlyAvg: [{ timestamp, avg }] }` (CET).
+
+Cache namespace: `market:cross:{zone}`. TTL: 1h/24h.
 
 ---
 
@@ -237,38 +297,65 @@ Single Redis cache (`getCached` / `setCached`) used for both market data and res
   - **1d** — HLA range bar chart, daily aggregates
   - HLA bars: dark spine showing high→low range; cyan tick for average; blue cap for high; slate cap for low
   - Compare previous period overlays a dashed average line + delta tooltips across all resolutions
+  - **Cross-market overlay**: when DE/BE/FR selected in toolbar, daily avg price lines overlaid on all resolutions (daily granularity, colour-coded per zone)
 - **Negative price hours per week** — bar chart, X-axis shows ISO week numbers (W20, W21, …), solar curtailment risk signal
-- **Legend toggle:** click any legend item to hide/show that series (uses `useLegendToggle` from `shared.jsx`)
+- **Generation Mix NL** — ComposedChart, stacked Areas + right-axis Line:
+  - Solar (warm yellow `#f59e0b`) and wind (muted blue `#6b8db5`) stacked areas, MW on left Y-axis
+  - DA average price line in cyan on right Y-axis (EUR/MWh)
+  - Resolution: **1h** (uses solarHourly/windHourly from ENTSO-E A75) | **1d** (daily avg)
+  - Drag-to-zoom via useZoom
+- **Legend toggle on all three charts**
 
 ### Balancing (`BalancingSection`)
 - **Imbalance Midprice NL** (EUR/MWh) — line chart from TenneT settlement-prices with **1h / 1d** resolution switcher (default 1d)
   - **1d** — pre-aggregated daily average mid price from `imbalance.daily`
   - **1h** — hourly average computed client-side from `imbalance.rawPoints` (15-min ISP data aggregated to 1h buckets by CET hour)
   - Mid price per ISP = `(dispatch_up + dispatch_down) / 2`; daily average = mean of all ISP mid prices that day
-  - Red dashed zero reference line to clearly show when the system flips long/short
-  - Legend toggle
+  - Red dashed zero reference line; legend toggle
+- **System Balance Delta NL** (MW) — bar chart from TenneT balance-delta:
+  - Bars colour-coded: green (`#4ade80`) for positive (system long), red (`#f87171`) for negative (system short)
+  - Red dashed zero reference line
+  - Resolution: **15m** (raw) | **1h** (hourly average)
+  - Drag-to-zoom; legend toggle
+  - Error state: N/A badge if TenneT endpoint unavailable
 
 ### Ancillary Services (`AncillaryServicesSection`)
 
 **aFRR Capacity NL — Price & Volume** (`ComposedChart`):
 - Source: ENTSO-E A81/B95 with A13 agreement type
 - Default resolution: **4h blocks** (can switch to **1d** daily average)
-- Y-axes: two left-side axes — outer for MW (capacity bars), inner for EUR/MW/h (price lines)
+- Y-axes: outer left for MW (capacity bars, width 52px), inner left for EUR/MW/h (price lines, width 65px — widened to prevent 4-digit label truncation)
+- Left chart margin increased to 10px to accommodate wider axis
 - Series: Up Capacity (MW bar), Down Capacity (MW bar), aFRR Up Price (line), aFRR Down Price (line)
-- Compare mode adds dashed Prev. Up / Prev. Down lines
-- Legend toggle
+- Compare mode adds dashed Prev. Up / Prev. Down lines; legend toggle
 
 **FCR Capacity NL — Price & Volume** (`ComposedChart`):
 - Source: ENTSO-E A81/B95 with A01 agreement type
 - Default resolution: **4h blocks** (can switch to **1d**)
 - Same dual-left-axis layout: MW bars + EUR/MW/h price line
+- **Cross-market overlay**: when DE/BE/FR selected, daily avg price lines overlaid (colour-coded per zone)
 - Legend toggle
 
-**aFRR Energy Price NL — Up / Down (EUR/MWh)** (`LineChart`):
-- Source: TenneT settlement-prices (raw 15-min)
-- Resolution switcher: **15m** / **1h** / **1d** (same pattern as Day-Ahead)
-- Series: aFRR Up Energy, aFRR Down Energy; compare mode adds dashed Prev. Up / Prev. Down
+**aFRR Energy Price NL — Up / Down (EUR/MWh)** (`ComposedChart`, was LineChart):
+- Source: TenneT settlement-prices (energy) + TenneT frr-activations (volume)
+- Resolution switcher: **15m** / **1h** / **1d** / **1w** (weekly aggregation added)
+  - Weekly: energy prices averaged, activation volumes summed
+- **FRR activation overlay**: activated up MW as muted green bars, activated down MW as muted red bars on a second left Y-axis. Only shown when frr-activations data is available.
+- Source badge updates to "TenneT (energy + FRR)" when activation data present
+- Compare mode adds dashed prev lines for energy prices only
 - Legend toggle
+
+**aFRR Merit Order NL — Bid Stack** (new, 4th chart):
+- Source: TenneT merit-order (per-day fetch via `/api/merit-order?date=YYYY-MM-DD`)
+- ComposedChart: X-axis = cumulative volume (MW), Y-axis = price (EUR/MW/h)
+- **Primary curve**: bid stack for selected PTU on selected day — cyan step line
+- **Average curve**: average bid stack for same PTU slot across sample days from selected range — muted dashed step line
+- **Clearing price**: horizontal reference line at last bid price for selected PTU
+- **Tightness indicator** in chart header: "Bid depth above clearing: X MW vs Y MW avg" — X in green if above avg, amber if below
+- **Date selector**: back/forward arrows + date input; changing date reloads primary curve for PTU 1
+- **PTU scrubber**: 96 clickable slots (15-min each), highlighted active slot, hour labels at 00:00/06:00/12:00/18:00/24:00
+- **Tooltip**: at hovered volume — Today price, Period avg price, Delta
+- Loading state: skeleton while fetching; N/A badge if TenneT unavailable
 
 ---
 

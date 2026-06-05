@@ -385,9 +385,27 @@ export async function fetchActualGeneration(startDate, endDate) {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, vals]) => ({ date, avg: vals.reduce((s, v) => s + v, 0) / vals.length }))
 
+    // Hourly aggregation in CET — one point per CET hour
+    const aggGenHourly = (pts) => {
+      const byHour = {}
+      for (const { ts, qty } of pts) {
+        const key = `${cetDate(ts)}T${String(cetHour(ts)).padStart(2, '0')}:00`
+        if (!byHour[key]) byHour[key] = []
+        byHour[key].push(qty)
+      }
+      return Object.entries(byHour)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([timestamp, vals]) => ({
+          timestamp,
+          mw: vals.reduce((s, v) => s + v, 0) / vals.length,
+        }))
+    }
+
     return {
-      solar: aggGen(solarPoints),
-      wind: aggGen(windPoints),
+      solar:       aggGen(solarPoints),
+      wind:        aggGen(windPoints),
+      solarHourly: aggGenHourly(solarPoints),
+      windHourly:  aggGenHourly(windPoints),
     }
 }
 
@@ -579,4 +597,48 @@ export async function fetchCapacityPrices(startDate, endDate) {
   fcrHourly.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
 
   return { afrrHourly, fcrHourly }
+}
+
+// ── Cross-market DA prices ────────────────────────────────────────────────────
+
+export const MARKET_ZONES = {
+  DE: '10Y1001A1001A82H',
+  BE: '10YBE----------2',
+  FR: '10YFR-RTE------C',
+}
+
+// Hourly averages in CET (for cross-market overlay at 1h resolution)
+function computeHourlyAvg(points) {
+  const byHour = {}
+  for (const { ts, price } of points) {
+    const key = `${cetDate(ts)}T${String(cetHour(ts)).padStart(2, '0')}:00`
+    if (!byHour[key]) byHour[key] = []
+    byHour[key].push(price)
+  }
+  return Object.entries(byHour)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([timestamp, prices]) => ({
+      timestamp,
+      avg: prices.reduce((s, p) => s + p, 0) / prices.length,
+    }))
+}
+
+// Fetch DA prices for any bidding zone — used for cross-market comparison.
+// Returns dailyAvg and hourlyAvg arrays (CET dates/timestamps).
+export async function fetchDayAheadPricesForZone(zone, startDate, endDate) {
+  const ps = startDate ? toEntsoeDate(startDate)    : periodStart()
+  const pe = endDate   ? toEntsoeDate(endDate, 1)   : periodEnd()
+  const xml = await entsoeRequest({
+    documentType: 'A44',
+    in_Domain:   zone,
+    out_Domain:  zone,
+    periodStart: ps,
+    periodEnd:   pe,
+  })
+  const points = parseXmlTimeSeries(xml)
+  if (!points.length) throw new Error(`No price points parsed for zone ${zone}`)
+  return {
+    dailyAvg:  aggregateToDailyAvg(points),
+    hourlyAvg: computeHourlyAvg(points),
+  }
 }

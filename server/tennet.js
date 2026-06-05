@@ -164,3 +164,104 @@ export async function fetchAFRRData(startDate, endDate) {
   }))
   return { rawPoints }
 }
+
+// ── Balance Delta ─────────────────────────────────────────────────────────────
+
+function parseBalanceDeltaPoints(data) {
+  const points = []
+  for (const ts of data?.Response?.TimeSeries ?? []) {
+    for (const pt of ts?.Period?.Points ?? []) {
+      if (!pt.timeInterval_start) continue
+      const delta = pt.balance_delta ?? pt.balanceDelta ?? pt.imbalance ?? null
+      if (delta == null) continue
+      points.push({
+        timestamp:    pt.timeInterval_start,
+        balanceDelta: parseFloat(delta),
+      })
+    }
+  }
+  return points
+}
+
+export async function fetchBalanceDelta(startDate, endDate) {
+  const chunks = monthChunks(startDate, endDate)
+  const all = []
+  for (const { from, to } of chunks) {
+    const data = await tennetRequest('balance-delta', from, to)
+    all.push(...parseBalanceDeltaPoints(data))
+  }
+  if (!all.length) throw new Error('No balance delta data returned from TenneT')
+  return all
+}
+
+// ── FRR Activations ───────────────────────────────────────────────────────────
+
+function parseFRRActivationPoints(data) {
+  const points = []
+  for (const ts of data?.Response?.TimeSeries ?? []) {
+    for (const pt of ts?.Period?.Points ?? []) {
+      if (!pt.timeInterval_start) continue
+      points.push({
+        timestamp:         pt.timeInterval_start,
+        activatedUpMw:     parseFloat(pt.activated_up    ?? pt.frr_up    ?? 0),
+        activatedDownMw:   parseFloat(pt.activated_down  ?? pt.frr_down  ?? 0),
+        settledReserveMw:  parseFloat(pt.settled_reserve ?? 0),
+        emergencyEnergyMw: parseFloat(pt.emergency_energy ?? 0),
+      })
+    }
+  }
+  return points
+}
+
+export async function fetchFRRActivations(startDate, endDate) {
+  const chunks = monthChunks(startDate, endDate)
+  const all = []
+  for (const { from, to } of chunks) {
+    const data = await tennetRequest('frr-activations', from, to)
+    all.push(...parseFRRActivationPoints(data))
+  }
+  if (!all.length) throw new Error('No FRR activation data returned from TenneT')
+  return all
+}
+
+// ── Merit Order ───────────────────────────────────────────────────────────────
+
+function parseMeritOrderData(data, date) {
+  // Group bids by PTU (15-min interval 1–96)
+  const ptuBids = {}
+  for (const ts of data?.Response?.TimeSeries ?? []) {
+    for (const pt of ts?.Period?.Points ?? []) {
+      if (!pt.timeInterval_start) continue
+      const time  = pt.timeInterval_start.slice(11, 16) // "HH:MM"
+      const [h, m] = time.split(':').map(Number)
+      const ptu    = h * 4 + Math.floor(m / 15) + 1    // 1–96
+      const price  = parseFloat(pt.price ?? pt.bid_price ?? pt.marginal_price ?? 0)
+      const volume = parseFloat(pt.quantity ?? pt.volume ?? pt.bid_volume ?? 0)
+      if (!ptuBids[ptu]) ptuBids[ptu] = []
+      ptuBids[ptu].push({ price, volume })
+    }
+  }
+
+  // Build supply curves per PTU (bids sorted ascending by price = supply curve)
+  const ptus = Object.entries(ptuBids)
+    .sort(([a], [b]) => +a - +b)
+    .map(([ptu, bids]) => {
+      const sorted = [...bids].sort((a, b) => a.price - b.price)
+      let cumVol = 0
+      return {
+        ptu: +ptu,
+        curve: sorted.map(b => {
+          cumVol += b.volume
+          return { cumVolume: +cumVol.toFixed(1), price: +b.price.toFixed(2) }
+        }),
+      }
+    })
+
+  return { date, ptus }
+}
+
+// Fetch merit order for a single day (server route caches per day in Redis)
+export async function fetchMeritOrderForDate(date) {
+  const data = await tennetRequest('merit-order', date, date)
+  return parseMeritOrderData(data, date)
+}
