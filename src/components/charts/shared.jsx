@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-export const legendStyle = { fontSize: 12, color: '#94a3b8', paddingTop: 4 }
+export const legendStyle = { fontSize: 11, fontFamily: 'var(--font-mono, monospace)', color: '#5A5A5A', paddingTop: 4 }
 
 // Hook: per-chart legend toggle. Call once per chart, use returned helpers on
 // each <Line>/<Bar> and the <Legend> element.
@@ -39,12 +39,11 @@ export function useLegendToggle() {
 }
 
 export const COLORS = {
-  blue: '#60a5fa',
-  green: '#34d399',
-  amber: '#fbbf24',
-  purple: '#a78bfa',
-  cyan: '#22d3ee',
-  orange: '#fb923c',
+  black:      '#000000',
+  terracotta: '#B36A4A',
+  brick:      '#8C4A42',
+  teal:       '#4C7873',
+  textMuted:  '#5A5A5A',
 }
 
 export const chartProps = {

@@ -347,9 +347,17 @@ function MeritOrderChart({ startDate, endDate }) {
       dates.push(d.toISOString().slice(0, 10))
     }
     let cancelled = false
-    Promise.all(dates.map(d => fetchMeritOrderDay(d).then(r => r.data))).then(results => {
-      if (!cancelled) setAllDayData(results.filter(Boolean))
-    })
+    // Sequential fetches with 300ms gap to avoid TenneT 429 rate limiting
+    ;(async () => {
+      const results = []
+      for (const d of dates) {
+        if (cancelled) return
+        const { data } = await fetchMeritOrderDay(d)
+        if (data) results.push(data)
+        await new Promise(res => setTimeout(res, 300))
+      }
+      if (!cancelled) setAllDayData(results)
+    })()
     return () => { cancelled = true }
   }, [startDate, endDate])
 
@@ -410,10 +418,10 @@ function MeritOrderChart({ startDate, endDate }) {
   const tightnessLabel = tightnessAbove != null
     ? <span className="merit-tightness">
         Bid depth above clearing:
-        <span style={{ color: tightnessGreen ? '#4ade80' : '#fbbf24', marginLeft: 4, fontWeight: 600 }}>
+        <span style={{ color: tightnessGreen ? COLORS.teal : COLORS.brick, marginLeft: 4, fontWeight: 600 }}>
           {tightnessAbove} MW
         </span>
-        {tightnessAvg != null && <span style={{ color: '#64748b' }}> vs {tightnessAvg} MW avg</span>}
+        {tightnessAvg != null && <span style={{ color: COLORS.textMuted }}> vs {tightnessAvg} MW avg</span>}
       </span>
     : null
 
@@ -447,19 +455,19 @@ function MeritOrderChart({ startDate, endDate }) {
 
       <ResponsiveContainer width="100%" height={220}>
         <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 10, bottom: 4 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
           <XAxis
             dataKey="cumVolume"
             type="number"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
+            tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }}
             tickFormatter={v => `${Math.round(v)}MW`}
             domain={['auto', 'auto']}
           />
           <YAxis
-            tick={{ fill: '#94a3b8', fontSize: 11 }}
+            tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }}
             width={55}
             tickFormatter={v => Number(v).toFixed(0)}
-            label={{ value: 'EUR/MW/h', angle: -90, position: 'insideLeft', style: { fill: '#64748b', fontSize: 10 }, dx: -5 }}
+            label={{ value: 'EUR/MW/h', angle: -90, position: 'insideLeft', style: { fill: COLORS.textMuted, fontSize: 10, fontFamily: 'var(--font-mono)' }, dx: -5 }}
           />
           <Tooltip
             content={({ active, payload, label }) => {
@@ -472,14 +480,14 @@ function MeritOrderChart({ startDate, endDate }) {
                   <p className="chart-tooltip-label">{Math.round(label)} MW cumulative</p>
                   {primaryV != null && (
                     <div className="chart-tooltip-row">
-                      <span className="chart-tooltip-dot" style={{ background: COLORS.cyan }} />
+                      <span className="chart-tooltip-dot" style={{ background: COLORS.black }} />
                       <span className="chart-tooltip-name">Today</span>
                       <span className="chart-tooltip-val">{Number(primaryV).toFixed(2)}</span>
                     </div>
                   )}
                   {avgV != null && (
                     <div className="chart-tooltip-row">
-                      <span className="chart-tooltip-dot" style={{ background: '#64748b' }} />
+                      <span className="chart-tooltip-dot" style={{ background: COLORS.textMuted }} />
                       <span className="chart-tooltip-name">Period avg</span>
                       <span className="chart-tooltip-val">{Number(avgV).toFixed(2)}</span>
                     </div>
@@ -497,10 +505,10 @@ function MeritOrderChart({ startDate, endDate }) {
               )
             }}
           />
-          <Line type="stepAfter" dataKey="primaryPrice" stroke={COLORS.cyan}  dot={false} strokeWidth={2}   name="Today"      isAnimationActive={false} connectNulls={false} />
-          <Line type="stepAfter" dataKey="avgPrice"     stroke="#475569"       dot={false} strokeWidth={1.5} name="Period avg" isAnimationActive={false} strokeDasharray="4 3" connectNulls={false} />
+          <Line type="stepAfter" dataKey="primaryPrice" stroke={COLORS.black}     dot={false} strokeWidth={2}   name="Today"      isAnimationActive={false} connectNulls={false} />
+          <Line type="stepAfter" dataKey="avgPrice"     stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} name="Period avg" isAnimationActive={false} strokeDasharray="4 3" connectNulls={false} />
           {clearingPrice != null && (
-            <ReferenceLine y={clearingPrice} stroke="#f59e0b" strokeDasharray="3 2" strokeWidth={1.5} label={{ value: 'clear', position: 'right', style: { fill: '#f59e0b', fontSize: 10 } }} />
+            <ReferenceLine y={clearingPrice} stroke={COLORS.teal} strokeDasharray="3 2" strokeWidth={1.5} label={{ value: 'clear', position: 'right', style: { fill: COLORS.teal, fontSize: 10, fontFamily: 'var(--font-mono)' } }} />
           )}
         </ComposedChart>
       </ResponsiveContainer>
@@ -524,7 +532,7 @@ function MeritOrderChart({ startDate, endDate }) {
           <span>18:00</span>
           <span>24:00</span>
         </div>
-        <div style={{ textAlign: 'center', color: '#64748b', fontSize: 11, marginTop: 2 }}>
+        <div style={{ textAlign: 'center', color: COLORS.textMuted, fontFamily: 'var(--font-mono)', fontSize: 11, marginTop: 2 }}>
           PTU {selectedPtu} — {ptuToTime(selectedPtu)}
         </div>
       </div>
@@ -671,22 +679,20 @@ export default function AncillaryServicesSection({
       <ChartWrap title="aFRR Capacity NL — Price & Volume" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} controls={afrrCapControls} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <ComposedChart data={zoom0.displayData} margin={{ top: 8, right: 12, left: 10, bottom: 4 }} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={v => fmtCapacityTs(v, afrrCapRes)} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
-            {/* Capacity MW — outer left axis */}
-            <YAxis yAxisId="cap"   orientation="left" width={52} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}MW`} />
-            {/* Price EUR/MW/h — inner left axis (wider to avoid truncation) */}
-            <YAxis yAxisId="price" orientation="left" width={65} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtCapacityTs(v, afrrCapRes)} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+            <YAxis yAxisId="cap"   orientation="left" width={52} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `${v}MW`} />
+            <YAxis yAxisId="price" orientation="left" width={65} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend {...lgd0.legendProps} />
-            <Bar yAxisId="cap" dataKey="afrrCapacityUpMW"   fill={COLORS.green} fillOpacity={0.18} name="Up Capacity (MW)"   hide={lgd0.isHidden('Up Capacity (MW)')}   isAnimationActive={false} />
-            <Bar yAxisId="cap" dataKey="afrrCapacityDownMW" fill={COLORS.amber} fillOpacity={0.18} name="Down Capacity (MW)" hide={lgd0.isHidden('Down Capacity (MW)')} isAnimationActive={false} />
-            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.green} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Up Price (EUR/MW/h)"   hide={lgd0.isHidden('aFRR Up Price (EUR/MW/h)')}   isAnimationActive={false} />
-            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.amber} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Down Price (EUR/MW/h)" hide={lgd0.isHidden('aFRR Down Price (EUR/MW/h)')} isAnimationActive={false} />
-            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up"   hide={lgd0.isHidden('Prev. Up')}   isAnimationActive={false} />}
-            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" hide={lgd0.isHidden('Prev. Down')} isAnimationActive={false} />}
+            <Bar yAxisId="cap" dataKey="afrrCapacityUpMW"   fill={COLORS.terracotta} fillOpacity={0.2} name="Up Capacity (MW)"   hide={lgd0.isHidden('Up Capacity (MW)')}   isAnimationActive={false} />
+            <Bar yAxisId="cap" dataKey="afrrCapacityDownMW" fill={COLORS.teal}       fillOpacity={0.2} name="Down Capacity (MW)" hide={lgd0.isHidden('Down Capacity (MW)')} isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityUpPrice"   stroke={COLORS.terracotta} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Up Price (EUR/MW/h)"   hide={lgd0.isHidden('aFRR Up Price (EUR/MW/h)')}   isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="afrrCapacityDownPrice" stroke={COLORS.teal}       dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="aFRR Down Price (EUR/MW/h)" hide={lgd0.isHidden('aFRR Down Price (EUR/MW/h)')} isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityUpPrice"   stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. Up"   hide={lgd0.isHidden('Prev. Up')}   isAnimationActive={false} />}
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevAfrrCapacityDownPrice" stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. Down" hide={lgd0.isHidden('Prev. Down')} isAnimationActive={false} />}
             {zoom0.refArea.left && zoom0.refArea.right && (
-              <ReferenceArea yAxisId="price" x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea yAxisId="price" x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -696,27 +702,27 @@ export default function AncillaryServicesSection({
       <ChartWrap title="FCR Capacity NL — Price & Volume" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} controls={fcrControls} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <ComposedChart data={zoom1.displayData} margin={{ top: 8, right: 12, left: 0, bottom: 4 }} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={v => fmtCapacityTs(v, fcrRes)} tick={{ fill: '#94a3b8', fontSize: 10 }} minTickGap={60} />
-            <YAxis yAxisId="cap"   orientation="left" width={42} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${v}MW`} />
-            <YAxis yAxisId="price" orientation="left" width={45} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtCapacityTs(v, fcrRes)} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+            <YAxis yAxisId="cap"   orientation="left" width={42} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `${v}MW`} />
+            <YAxis yAxisId="price" orientation="left" width={45} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip />} />
             <Legend {...lgd1.legendProps} />
-            <Bar  yAxisId="cap"   dataKey="capacityMW" fill={COLORS.purple} fillOpacity={0.18} name="FCR Capacity (MW)"           hide={lgd1.isHidden('FCR Capacity (MW)')}           isAnimationActive={false} />
-            <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={COLORS.purple} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" hide={lgd1.isHidden('FCR Clearing Price (EUR/MW/h)')} isAnimationActive={false} />
-            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevPrice" stroke={COLORS.purple} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd1.isHidden('Prev. period')} isAnimationActive={false} />}
-            {/* Cross-market overlay on FCR price chart */}
+            <Bar  yAxisId="cap"   dataKey="capacityMW" fill={COLORS.teal} fillOpacity={0.2} name="FCR Capacity (MW)"           hide={lgd1.isHidden('FCR Capacity (MW)')}           isAnimationActive={false} />
+            <Line yAxisId="price" type="stepAfter" dataKey="price" stroke={COLORS.teal} dot={{ r: 2 }} activeDot={{ r: 4 }} strokeWidth={2} name="FCR Clearing Price (EUR/MW/h)" hide={lgd1.isHidden('FCR Clearing Price (EUR/MW/h)')} isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="stepAfter" dataKey="prevPrice" stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. period" hide={lgd1.isHidden('Prev. period')} isAnimationActive={false} />}
+            {/* Cross-market overlay — greyscale dash variations */}
             {(selectedMarkets || []).includes('DE') && crossMarketData?.DE && (
-              <Line yAxisId="price" type="monotone" dataKey="deAvg" stroke={marketColors?.DE ?? '#fbbf24'} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd1.isHidden('DE avg')} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="deAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd1.isHidden('DE avg')} isAnimationActive={false} />
             )}
             {(selectedMarkets || []).includes('BE') && crossMarketData?.BE && (
-              <Line yAxisId="price" type="monotone" dataKey="beAvg" stroke={marketColors?.BE ?? '#a78bfa'} dot={false} strokeWidth={1.5} name="BE avg" hide={lgd1.isHidden('BE avg')} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="beAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeDasharray="4 3" name="BE avg" hide={lgd1.isHidden('BE avg')} isAnimationActive={false} />
             )}
             {(selectedMarkets || []).includes('FR') && crossMarketData?.FR && (
-              <Line yAxisId="price" type="monotone" dataKey="frAvg" stroke={marketColors?.FR ?? '#fb7185'} dot={false} strokeWidth={1.5} name="FR avg" hide={lgd1.isHidden('FR avg')} isAnimationActive={false} />
+              <Line yAxisId="price" type="monotone" dataKey="frAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeDasharray="8 4" name="FR avg" hide={lgd1.isHidden('FR avg')} isAnimationActive={false} />
             )}
             {zoom1.refArea.left && zoom1.refArea.right && (
-              <ReferenceArea yAxisId="price" x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea yAxisId="price" x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -734,24 +740,20 @@ export default function AncillaryServicesSection({
       >
         <ResponsiveContainer width="100%" height={200}>
           <ComposedChart data={zoom2.displayData} margin={{ top: 8, right: 12, left: 10, bottom: 4 }} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={v => fmtEnergyTs(v, energyRes)} tick={{ fill: '#94a3b8', fontSize: energyRes === '1d' || energyRes === '1w' ? 11 : 10 }} minTickGap={60} />
-            {/* Activation MW — left axis */}
-            {hasFrrData && <YAxis yAxisId="vol" orientation="left" width={52} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => `${Math.round(v)}MW`} />}
-            {/* Energy price EUR/MWh — right axis (or main left if no FRR) */}
-            <YAxis yAxisId="price" orientation={hasFrrData ? 'right' : 'left'} width={45} tick={{ fill: '#94a3b8', fontSize: 11 }} tickFormatter={v => Number(v).toFixed(2)} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtEnergyTs(v, energyRes)} tick={{ fill: '#5A5A5A', fontSize: energyRes === '1d' || energyRes === '1w' ? 11 : 10, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+            {hasFrrData && <YAxis yAxisId="vol" orientation="left" width={52} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `${Math.round(v)}MW`} />}
+            <YAxis yAxisId="price" orientation={hasFrrData ? 'right' : 'left'} width={45} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} tickFormatter={v => Number(v).toFixed(2)} />
             <Tooltip content={<CompareTooltip labelFormatter={v => fmtEnergyTs(v, energyRes)} />} />
             <Legend {...lgd2.legendProps} />
-            {/* FRR activation volume bars */}
-            {hasFrrData && <Bar yAxisId="vol" dataKey="activatedUpMw"   fill="#4ade80" fillOpacity={0.25} name="FRR Up (MW)"   hide={lgd2.isHidden('FRR Up (MW)')}   isAnimationActive={false} />}
-            {hasFrrData && <Bar yAxisId="vol" dataKey="activatedDownMw" fill="#f87171" fillOpacity={0.25} name="FRR Down (MW)" hide={lgd2.isHidden('FRR Down (MW)')} isAnimationActive={false} />}
-            {/* Energy price lines */}
-            <Line yAxisId="price" type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)"   hide={lgd2.isHidden('aFRR Up Energy (EUR/MWh)')}   isAnimationActive={false} />
-            <Line yAxisId="price" type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" hide={lgd2.isHidden('aFRR Down Energy (EUR/MWh)')} isAnimationActive={false} />
-            {compareEnabled && <Line yAxisId="price" type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.green} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Up"   hide={lgd2.isHidden('Prev. Up')}   isAnimationActive={false} />}
-            {compareEnabled && <Line yAxisId="price" type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. Down" hide={lgd2.isHidden('Prev. Down')} isAnimationActive={false} />}
+            {hasFrrData && <Bar yAxisId="vol" dataKey="activatedUpMw"   fill={COLORS.terracotta} fillOpacity={0.25} name="FRR Up (MW)"   hide={lgd2.isHidden('FRR Up (MW)')}   isAnimationActive={false} />}
+            {hasFrrData && <Bar yAxisId="vol" dataKey="activatedDownMw" fill={COLORS.teal}       fillOpacity={0.25} name="FRR Down (MW)" hide={lgd2.isHidden('FRR Down (MW)')} isAnimationActive={false} />}
+            <Line yAxisId="price" type="monotone" dataKey="afrrUpEnergyPrice"   stroke={COLORS.terracotta} dot={false} strokeWidth={2} name="aFRR Up Energy (EUR/MWh)"   hide={lgd2.isHidden('aFRR Up Energy (EUR/MWh)')}   isAnimationActive={false} />
+            <Line yAxisId="price" type="monotone" dataKey="afrrDownEnergyPrice" stroke={COLORS.teal}       dot={false} strokeWidth={2} name="aFRR Down Energy (EUR/MWh)" hide={lgd2.isHidden('aFRR Down Energy (EUR/MWh)')} isAnimationActive={false} />
+            {compareEnabled && <Line yAxisId="price" type="monotone" dataKey="prevAfrrUpEnergyPrice"   stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. Up"   hide={lgd2.isHidden('Prev. Up')}   isAnimationActive={false} />}
+            {compareEnabled && <Line yAxisId="price" type="monotone" dataKey="prevAfrrDownEnergyPrice" stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. Down" hide={lgd2.isHidden('Prev. Down')} isAnimationActive={false} />}
             {zoom2.refArea.left && zoom2.refArea.right && (
-              <ReferenceArea yAxisId="price" x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea yAxisId="price" x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </ComposedChart>
         </ResponsiveContainer>

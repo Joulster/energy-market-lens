@@ -4,6 +4,7 @@ import BalancingSection from '../charts/BalancingSection.jsx'
 import AncillaryServicesSection from '../charts/AncillaryServicesSection.jsx'
 import { buildNarrativePayload, fetchSectionNarrative, loadAllMarketData, fetchCrossMarketPrices } from '../../data/index.js'
 import { RANGE_OPTIONS, computeDates, computePrevDates } from '../../data/dateRange.js'
+import { pushStatus } from '../StatusBar.jsx'
 
 const SECTIONS = ['dayAhead', 'balancing', 'ancillaryServices']
 
@@ -86,10 +87,13 @@ export default function ChartsPanel({ data, dataLoading, selectedRange, onRangeC
   }
 
   // ── Per-section generate handler ──────────────────────────────────────────
+  const SECTION_LABELS = { dayAhead: 'Day-Ahead', balancing: 'Balancing', ancillaryServices: 'Ancillary Services' }
+
   async function handleGenerateSection(section) {
     setLoadings(prev => ({ ...prev, [section]: true }))
     const datesSnapshot = { ...computeDates(selectedRange) }
     const forceRefresh  = narratives[section] !== undefined
+    pushStatus(`Generating ${SECTION_LABELS[section] ?? section} summary...`)
     try {
       const fullPayload = buildNarrativePayload(data, datesSnapshot.startDate, datesSnapshot.endDate)
       const result = await fetchSectionNarrative(
@@ -102,6 +106,9 @@ export default function ChartsPanel({ data, dataLoading, selectedRange, onRangeC
         setGeneratedDatesMap(prev => ({ ...prev, [section]: datesSnapshot }))
         if (!result.fromCache) {
           setLastGeneratedMap(prev => ({ ...prev, [section]: new Date().toLocaleTimeString() }))
+          pushStatus(`${SECTION_LABELS[section] ?? section} summary ready`)
+        } else {
+          pushStatus(`${SECTION_LABELS[section] ?? section} summary loaded from cache`)
         }
       }
     } finally {

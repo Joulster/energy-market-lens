@@ -1,8 +1,14 @@
 // Redis-backed monthly cache for expensive research calls (Regulatory Watch, Customer Signals).
-// Falls back to an in-memory Map when REDIS_URL is not set (local dev without Redis).
+// Falls back to a file-based JSON cache when REDIS_URL is not set (local dev without Redis).
 // Cache keys include YYYY-MM so entries automatically become stale at the start of each month.
 
 import Redis from 'ioredis'
+import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dir  = dirname(fileURLToPath(import.meta.url))
+const CACHE_FILE = join(__dir, '..', '.cache', 'research-cache.json')
 
 let _redis = null
 
@@ -29,8 +35,20 @@ function ttlSeconds() {
   return Math.ceil((next - now) / 1000)
 }
 
-// In-memory fallback (local dev / Redis unavailable)
-const fallback = new Map()
+// File-based fallback — persists across server restarts so research calls aren't repeated locally
+function readFileCache() {
+  try { return JSON.parse(readFileSync(CACHE_FILE, 'utf8')) } catch { return {} }
+}
+
+function writeFileCache(data) {
+  try {
+    mkdirSync(dirname(CACHE_FILE), { recursive: true })
+    writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2))
+    console.log('[cache] written to', CACHE_FILE)
+  } catch (err) {
+    console.error('[cache] write error:', err.message, '| path:', CACHE_FILE)
+  }
+}
 
 export async function getCached(namespace, fingerprint) {
   const key   = buildKey(namespace, fingerprint)
@@ -43,7 +61,7 @@ export async function getCached(namespace, fingerprint) {
       console.error('Redis get error:', err.message)
     }
   }
-  return fallback.get(key) ?? null
+  return readFileCache()[key] ?? null
 }
 
 export async function setCached(namespace, fingerprint, items, ttl = ttlSeconds()) {
@@ -58,5 +76,7 @@ export async function setCached(namespace, fingerprint, items, ttl = ttlSeconds(
       console.error('Redis set error:', err.message)
     }
   }
-  fallback.set(key, entry)
+  const data = readFileCache()
+  data[key]  = entry
+  writeFileCache(data)
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ChartsPanel    from './components/ChartsPanel/index.jsx'
 import NarrativePanel from './components/NarrativePanel.jsx'
+import StatusBar, { pushStatus } from './components/StatusBar.jsx'
 import { loadSourceData } from './data/index.js'
 import { computeDates }   from './data/dateRange.js'
 import { useUser }        from './components/AuthGate.jsx'
@@ -77,7 +78,9 @@ export default function App() {
   useEffect(() => {
     setMarketData(EMPTY_DATA)
     setDataLoading({ dayAhead: true, generation: true, imbalance: true, afrr: true, balanceDelta: true, frrActivations: true })
+    pushStatus('Refreshing market data...')
     const { startDate, endDate } = computeDates(selectedRange)
+    const SOURCE_LABELS = { dayAhead: 'Day-ahead prices', generation: 'Generation mix', imbalance: 'Imbalance prices', afrr: 'aFRR / FCR data', balanceDelta: 'Balance delta', frrActivations: 'FRR activations' }
     for (const source of SOURCES) {
       loadSourceData(source, startDate, endDate).then(({ data, error }) => {
         setMarketData(prev => ({
@@ -86,6 +89,11 @@ export default function App() {
           errors: { ...prev.errors, [source]: error },
         }))
         setDataLoading(prev => ({ ...prev, [source]: false }))
+        if (error) {
+          pushStatus(`${SOURCE_LABELS[source] ?? source} unavailable`)
+        } else {
+          pushStatus(`${SOURCE_LABELS[source] ?? source} updated`)
+        }
       })
     }
   }, [selectedRange])
@@ -93,11 +101,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <div className="app-header-brand">
-          <h1 className="app-title">Energy Market Lens — NL <span className="beta-tag">beta</span></h1>
-          <span className="app-subtitle">NL energy market intelligence · multi-horizon view</span>
+        <StatusBar />
+        <div className="app-header-title-row">
+          <div className="app-header-brand">
+            <h1 className="app-title">Mool <span className="beta-tag">beta</span></h1>
+            <span className="app-subtitle">Market signals · regulatory watch · customer intelligence</span>
+          </div>
+          <Avatar />
         </div>
-        <Avatar />
       </header>
 
       <div className="app-body" ref={bodyRef}>

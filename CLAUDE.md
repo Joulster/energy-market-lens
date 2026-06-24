@@ -1,4 +1,4 @@
-# Energy Market Lens — Project Context
+# Mool — Project Context
 
 ## What This Is
 
@@ -13,7 +13,7 @@ A full-stack dashboard for monitoring Dutch energy markets, built for a **Head o
 | Frontend | React 18 + Vite 5, Recharts, plain CSS |
 | Backend | Express (Node 18+, ESM), port via `$PORT` env var (default 3001) |
 | AI | `@anthropic-ai/sdk` — Claude Haiku 4.5 (narrative) + Claude Sonnet 4.6 (regulatory/customer signals + web search) |
-| Cache | Redis (ioredis) — market data (1h/24h TTL) + research calls (monthly TTL); falls back to in-memory Map when `REDIS_URL` is not set |
+| Cache | Redis (ioredis) — market data (1h/24h TTL) + research calls (monthly TTL); falls back to file-based JSON cache (`.cache/research-cache.json`) when `REDIS_URL` is not set |
 | Observability | LangSmith (`langsmith` SDK) — traces all Claude calls with token usage, latency, prompt version; silently no-ops when `LANGCHAIN_API_KEY` is absent |
 | Auth | WorkOS User Management — magic link email flow; session cookie via Redis |
 | Dev proxy | Vite proxies `/api/*` and `/auth/*` → `http://localhost:3001` (dev only; disabled in production) |
@@ -62,7 +62,7 @@ LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 ```
 src/
   App.jsx                          # Root — loads market data, manages panel widths, Avatar component
-  App.css                          # Single dark-theme stylesheet (includes auth + avatar styles)
+  App.css                          # Black-and-white editorial stylesheet — Source Serif 4 (headlines/narrative) + IBM Plex Mono (everything else); CSS custom properties for colour tokens; no box-shadow; max border-radius 2px
   AppRouter.jsx                    # React Router: /auth/login, /auth/unauthorised, /* (AuthGate-wrapped App)
   main.jsx                         # Vite entry — BrowserRouter wrapper
   pages/
@@ -72,6 +72,7 @@ src/
     index.js                       # loadSourceData(), loadAllMarketData(), buildNarrativePayload(), fetchSectionNarrative()
     dateRange.js                   # RANGE_OPTIONS, computeDates(), computePrevDates()
   components/
+    StatusBar.jsx                  # Persistent status log strip in the fixed header; module-level pushStatus() export allows calls from anywhere without React context
     AuthGate.jsx                   # Checks /api/auth/me on mount; provides useUser() hook via AuthContext
     ChartsPanel/index.jsx          # Left panel — 3 market sections + compare feature + per-section AI summaries
     NarrativePanel.jsx             # Right panel — Regulatory Watch + Customer Signals
@@ -131,7 +132,7 @@ server/
   claude.js        # generateDayAheadNarrative(), generateBalancingNarrative(), generateAncillaryNarrative(),
                    # generateRegulatoryWatch(), generateCustomerSignals(), callHaiku() shared helper
   prompts.js       # Central store for all 5 system prompts + PROMPT_VERSIONS for LangSmith filtering
-  researchCache.js # Redis-backed cache (ioredis); in-memory fallback when REDIS_URL unset
+  researchCache.js # Redis-backed cache (ioredis); file-based JSON fallback (.cache/research-cache.json) when REDIS_URL unset — persists across restarts so research calls aren't repeated locally
   mockData.js      # Seeded mock data (kept for reference, no longer used as fallback)
 ```
 
@@ -349,7 +350,7 @@ Single Redis cache (`getCached` / `setCached`) used for both market data and res
 - Source: TenneT merit-order (per-day fetch via `/api/merit-order?date=YYYY-MM-DD`)
 - ComposedChart: X-axis = cumulative volume (MW), Y-axis = price (EUR/MW/h)
 - **Primary curve**: bid stack for selected PTU on selected day — cyan step line
-- **Average curve**: average bid stack for same PTU slot across sample days from selected range — muted dashed step line
+- **Average curve**: average bid stack for same PTU slot across sample days from selected range — muted dashed step line. Sample days are fetched sequentially with a 300ms gap to avoid TenneT 429 rate limiting (replaced previous `Promise.all` burst)
 - **Clearing price**: horizontal reference line at last bid price for selected PTU
 - **Tightness indicator** in chart header: "Bid depth above clearing: X MW vs Y MW avg" — X in green if above avg, amber if below
 - **Date selector**: back/forward arrows + date input; changing date reloads primary curve for PTU 1
@@ -571,7 +572,7 @@ WorkOS User Management with magic link email flow. No passwords.
 **Server setup (manual, one-time):**
 1. Create a WorkOS account and organisation
 2. Enable "Magic Auth" in User Management → Authentication Methods
-3. Set Redirect URI to `{APP_BASE_URL}/auth/callback` (e.g. `https://energy-market-lens.up.railway.app/auth/callback`)
+3. Set Redirect URI to `{APP_BASE_URL}/auth/callback` (e.g. `https://mool.up.railway.app/auth/callback`)
 4. Add users in User Management → Users (only listed users can authenticate)
 5. Copy `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` to env
 

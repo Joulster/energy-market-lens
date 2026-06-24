@@ -58,7 +58,7 @@ export default function Login() {
     return (
       <div className="auth-page">
         <div className="auth-card">
-          <p className="auth-title">Energy Market Lens</p>
+          <p className="auth-title">Mool</p>
           <p className="auth-tagline">Check your email for a code</p>
           <p className="auth-sent-detail" style={{ marginBottom: 20 }}>
             We sent a 6-digit code to <strong style={{ color: '#f1f5f9' }}>{email}</strong>.
@@ -98,7 +98,7 @@ export default function Login() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <p className="auth-title">Energy Market Lens</p>
+        <p className="auth-title">Mool</p>
         <p className="auth-tagline">Market signals · regulatory watch · customer intelligence</p>
 
         <form onSubmit={handleSendLink}>

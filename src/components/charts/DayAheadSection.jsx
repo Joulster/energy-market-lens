@@ -45,7 +45,7 @@ function RawPriceTooltip({ active, payload, label, resolution }) {
     <div className="chart-tooltip">
       <p className="chart-tooltip-label">{fmtLabel}</p>
       <div className="chart-tooltip-row">
-        <span className="chart-tooltip-dot" style={{ background: COLORS.cyan }} />
+        <span className="chart-tooltip-dot" style={{ background: COLORS.black }} />
         <span className="chart-tooltip-name">DA Price</span>
         <span className="chart-tooltip-val">{price != null ? Number(price).toFixed(2) : '—'}</span>
         {delta != null && (
@@ -132,10 +132,10 @@ function HLABar({ x, y, width, height, high, low, avg }) {
   const tickW  = Math.max(width * 0.85, 3)
   return (
     <g>
-      <rect x={midX - barW / 2} y={y} width={barW} height={height} fill="#1e3a5f" rx={1} />
-      <rect x={x + (width - tickW) / 2} y={y} width={tickW} height={2} fill="#7dd3fc" rx={1} />
-      <rect x={x + (width - tickW) / 2} y={y + height - 2} width={tickW} height={2} fill="#475569" rx={1} />
-      <rect x={x + (width - tickW) / 2} y={avgPx - 1.5} width={tickW} height={3} fill={COLORS.cyan} rx={1} />
+      <rect x={midX - barW / 2} y={y} width={barW} height={height} fill={avg >= 0 ? COLORS.terracotta : COLORS.teal} rx={1} />
+      <rect x={x + (width - tickW) / 2} y={y} width={tickW} height={2} fill={COLORS.textMuted} rx={1} />
+      <rect x={x + (width - tickW) / 2} y={y + height - 2} width={tickW} height={2} fill={COLORS.textMuted} rx={1} />
+      <rect x={x + (width - tickW) / 2} y={avgPx - 1.5} width={tickW} height={3} fill={COLORS.black} rx={1} />
     </g>
   )
 }
@@ -146,9 +146,9 @@ function HLATooltip({ active, payload, label, resolution }) {
   if (!d) return null
   const fmtLabel = label ? (resolution === '1d' ? fmtDate(label) : fmtCetDateTime(label)) : ''
   const rows = [
-    { name: 'High', val: d.high, prev: d.prevHigh, color: '#7dd3fc' },
-    { name: 'Avg',  val: d.avg,  prev: d.prevAvg,  color: COLORS.cyan },
-    { name: 'Low',  val: d.low,  prev: d.prevLow,  color: '#64748b' },
+    { name: 'High', val: d.high, prev: d.prevHigh, color: COLORS.textMuted },
+    { name: 'Avg',  val: d.avg,  prev: d.prevAvg,  color: COLORS.black },
+    { name: 'Low',  val: d.low,  prev: d.prevLow,  color: COLORS.textMuted },
   ]
   return (
     <div className="chart-tooltip">
@@ -403,49 +403,49 @@ export default function DayAheadSection({
         <ResponsiveContainer width="100%" height={220}>
           {isCandlestick ? (
             <ComposedChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} barCategoryGap="1%" style={{ cursor: 'crosshair', userSelect: 'none' }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={hlaDomain} tickFormatter={v => Number(v).toFixed(2)} />
-              <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+              <XAxis dataKey="ts" tickFormatter={tickFmt} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+              <YAxis tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} width={45} domain={hlaDomain} tickFormatter={v => Number(v).toFixed(2)} />
+              <ReferenceLine y={0} stroke={COLORS.brick} strokeDasharray="4 2" />
               <Tooltip content={<HLATooltip resolution={resolution} />} />
               <Legend {...lgd0.legendProps} />
               <Bar dataKey={d => [d.low, d.high]} shape={<HLABar />} isAnimationActive={false} name="DA Price H/L/Avg" hide={lgd0.isHidden('DA Price H/L/Avg')} />
-              {compareEnabled && <Line type="monotone" dataKey="prevAvg" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Previous period avg" hide={lgd0.isHidden('Previous period avg')} isAnimationActive={false} />}
-              {/* Cross-market overlays (daily avg) */}
+              {compareEnabled && <Line type="monotone" dataKey="prevAvg" stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Previous period avg" hide={lgd0.isHidden('Previous period avg')} isAnimationActive={false} />}
+              {/* Cross-market overlays (daily avg) — greyscale dash variations */}
               {(selectedMarkets || []).includes('DE') && crossMarketData?.DE && (
-                <Line type="monotone" dataKey="deAvg" stroke={marketColors?.DE ?? '#fbbf24'} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd0.isHidden('DE avg')} isAnimationActive={false} />
+                <Line type="monotone" dataKey="deAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd0.isHidden('DE avg')} isAnimationActive={false} />
               )}
               {(selectedMarkets || []).includes('BE') && crossMarketData?.BE && (
-                <Line type="monotone" dataKey="beAvg" stroke={marketColors?.BE ?? '#a78bfa'} dot={false} strokeWidth={1.5} name="BE avg" hide={lgd0.isHidden('BE avg')} isAnimationActive={false} />
+                <Line type="monotone" dataKey="beAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeDasharray="4 3" name="BE avg" hide={lgd0.isHidden('BE avg')} isAnimationActive={false} />
               )}
               {(selectedMarkets || []).includes('FR') && crossMarketData?.FR && (
-                <Line type="monotone" dataKey="frAvg" stroke={marketColors?.FR ?? '#fb7185'} dot={false} strokeWidth={1.5} name="FR avg" hide={lgd0.isHidden('FR avg')} isAnimationActive={false} />
+                <Line type="monotone" dataKey="frAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeDasharray="8 4" name="FR avg" hide={lgd0.isHidden('FR avg')} isAnimationActive={false} />
               )}
               {zoom0.refArea.left && zoom0.refArea.right && (
-                <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+                <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
               )}
             </ComposedChart>
           ) : (
             <ComposedChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="ts" tickFormatter={fmtCetDateTimeShort} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
-              <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} domain={['auto', 'auto']} tickFormatter={v => Number(v).toFixed(2)} />
-              <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
+              <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+              <XAxis dataKey="ts" tickFormatter={fmtCetDateTimeShort} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+              <YAxis tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} width={45} domain={['auto', 'auto']} tickFormatter={v => Number(v).toFixed(2)} />
+              <ReferenceLine y={0} stroke={COLORS.brick} strokeDasharray="4 2" />
               <Tooltip content={<RawPriceTooltip resolution={resolution} />} />
               <Legend {...lgd0.legendProps} />
-              <Line type="monotone" dataKey="price" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} name="DA Price (EUR/MWh)" hide={lgd0.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
-              {compareEnabled && <Line type="monotone" dataKey="prevPrice" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd0.isHidden('Prev. period')} isAnimationActive={false} />}
+              <Line type="monotone" dataKey="price" stroke={COLORS.black} dot={false} strokeWidth={1.5} name="DA Price (EUR/MWh)" hide={lgd0.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
+              {compareEnabled && <Line type="monotone" dataKey="prevPrice" stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. period" hide={lgd0.isHidden('Prev. period')} isAnimationActive={false} />}
               {(selectedMarkets || []).includes('DE') && crossMarketData?.DE && (
-                <Line type="monotone" dataKey="deAvg" stroke={marketColors?.DE ?? '#fbbf24'} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd0.isHidden('DE avg')} isAnimationActive={false} />
+                <Line type="monotone" dataKey="deAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} name="DE avg" hide={lgd0.isHidden('DE avg')} isAnimationActive={false} />
               )}
               {(selectedMarkets || []).includes('BE') && crossMarketData?.BE && (
-                <Line type="monotone" dataKey="beAvg" stroke={marketColors?.BE ?? '#a78bfa'} dot={false} strokeWidth={1.5} name="BE avg" hide={lgd0.isHidden('BE avg')} isAnimationActive={false} />
+                <Line type="monotone" dataKey="beAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeDasharray="4 3" name="BE avg" hide={lgd0.isHidden('BE avg')} isAnimationActive={false} />
               )}
               {(selectedMarkets || []).includes('FR') && crossMarketData?.FR && (
-                <Line type="monotone" dataKey="frAvg" stroke={marketColors?.FR ?? '#fb7185'} dot={false} strokeWidth={1.5} name="FR avg" hide={lgd0.isHidden('FR avg')} isAnimationActive={false} />
+                <Line type="monotone" dataKey="frAvg" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeDasharray="8 4" name="FR avg" hide={lgd0.isHidden('FR avg')} isAnimationActive={false} />
               )}
               {zoom0.refArea.left && zoom0.refArea.right && (
-                <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+                <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
               )}
             </ComposedChart>
           )}
@@ -456,15 +456,15 @@ export default function DayAheadSection({
       <ChartWrap title="Negative Price Hours per Week NL" source="ENTSO-E" isMock={isMock} isLoading={dataLoading} error={errors?.dayAhead} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="week" tickFormatter={fmtWeek} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={35} allowDecimals={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+            <XAxis dataKey="week" tickFormatter={fmtWeek} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} />
+            <YAxis tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} width={35} allowDecimals={false} />
             <Tooltip content={<CompareTooltip />} labelFormatter={fmtWeek} />
             <Legend {...lgd1.legendProps} />
-            <Bar dataKey="count" fill={COLORS.orange} name="Hours with negative DA price" hide={lgd1.isHidden('Hours with negative DA price')} radius={[2, 2, 0, 0]} />
-            {compareEnabled && <Bar dataKey="prevCount" fill={COLORS.orange} fillOpacity={0.35} name="Prev. period" hide={lgd1.isHidden('Prev. period')} radius={[2, 2, 0, 0]} />}
+            <Bar dataKey="count" fill={COLORS.brick} name="Hours with negative DA price" hide={lgd1.isHidden('Hours with negative DA price')} radius={[2, 2, 0, 0]} />
+            {compareEnabled && <Bar dataKey="prevCount" fill={COLORS.textMuted} fillOpacity={0.4} name="Prev. period" hide={lgd1.isHidden('Prev. period')} radius={[2, 2, 0, 0]} />}
             {zoom1.refArea.left && zoom1.refArea.right && (
-              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </BarChart>
         </ResponsiveContainer>
@@ -482,26 +482,22 @@ export default function DayAheadSection({
       >
         <ResponsiveContainer width="100%" height={200}>
           <ComposedChart data={zoom2.displayData} margin={{ top: 8, right: 48, left: 0, bottom: 4 }} {...zoom2.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
             <XAxis
               dataKey="ts"
               tickFormatter={v => genRes === '1d' ? fmtDate(v) : fmtCetDateTimeShort(v)}
-              tick={{ fill: '#94a3b8', fontSize: 11 }}
+              tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }}
               minTickGap={60}
             />
-            {/* Left Y — generation MW */}
-            <YAxis yAxisId="gen" orientation="left" width={48} tick={{ fill: '#94a3b8', fontSize: 10 }} tickFormatter={v => `${Math.round(v)}`} />
-            {/* Right Y — DA price EUR/MWh */}
-            <YAxis yAxisId="price" orientation="right" width={48} tick={{ fill: '#64748b', fontSize: 10 }} tickFormatter={v => v != null ? Number(v).toFixed(0) : ''} />
+            <YAxis yAxisId="gen" orientation="left" width={48} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickFormatter={v => `${Math.round(v)}`} />
+            <YAxis yAxisId="price" orientation="right" width={48} tick={{ fill: '#5A5A5A', fontSize: 10, fontFamily: 'var(--font-mono)' }} tickFormatter={v => v != null ? Number(v).toFixed(0) : ''} />
             <Tooltip content={<CompareTooltip />} />
             <Legend {...lgd2.legendProps} />
-            {/* Stacked areas: solar bottom, wind on top */}
-            <Area yAxisId="gen" type="monotone" dataKey="solar" stackId="gen" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.35} dot={false} name="Solar (MW)" hide={lgd2.isHidden('Solar (MW)')} isAnimationActive={false} />
-            <Area yAxisId="gen" type="monotone" dataKey="wind"  stackId="gen" stroke="#6b8db5" fill="#6b8db5" fillOpacity={0.35} dot={false} name="Wind (MW)"  hide={lgd2.isHidden('Wind (MW)')}  isAnimationActive={false} />
-            {/* DA price line on right axis */}
-            <Line yAxisId="price" type="monotone" dataKey="price" stroke={COLORS.cyan} dot={false} strokeWidth={1.5} strokeOpacity={0.6} name="DA Price (EUR/MWh)" hide={lgd2.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
+            <Area yAxisId="gen" type="monotone" dataKey="solar" stackId="gen" stroke={COLORS.terracotta} fill={COLORS.terracotta} fillOpacity={0.35} dot={false} name="Solar (MW)" hide={lgd2.isHidden('Solar (MW)')} isAnimationActive={false} />
+            <Area yAxisId="gen" type="monotone" dataKey="wind"  stackId="gen" stroke={COLORS.teal} fill={COLORS.teal} fillOpacity={0.35} dot={false} name="Wind (MW)"  hide={lgd2.isHidden('Wind (MW)')}  isAnimationActive={false} />
+            <Line yAxisId="price" type="monotone" dataKey="price" stroke={COLORS.black} dot={false} strokeWidth={1.5} strokeOpacity={0.5} name="DA Price (EUR/MWh)" hide={lgd2.isHidden('DA Price (EUR/MWh)')} isAnimationActive={false} />
             {zoom2.refArea.left && zoom2.refArea.right && (
-              <ReferenceArea yAxisId="gen" x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea yAxisId="gen" x1={zoom2.refArea.left} x2={zoom2.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </ComposedChart>
         </ResponsiveContainer>

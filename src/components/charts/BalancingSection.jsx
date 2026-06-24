@@ -209,16 +209,16 @@ export default function BalancingSection({
       <ChartWrap title="Imbalance Midprice NL (EUR/MWh)" source="TenneT" isMock={isMock} isLoading={dataLoading} controls={resolutionControls} zoomed={zoom0.isZoomed} onReset={zoom0.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <LineChart data={zoom0.displayData} {...chartProps} {...zoom0.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={v => fmtImbalanceTs(v, resolution)} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
-            <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtImbalanceTs(v, resolution)} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+            <YAxis tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} width={45} tickFormatter={v => Number(v).toFixed(2)} />
+            <ReferenceLine y={0} stroke={COLORS.brick} strokeDasharray="4 2" />
             <Tooltip content={<CompareTooltip />} />
             <Legend {...lgd0.legendProps} />
-            <Line type="monotone" dataKey="midPrice" stroke={COLORS.amber} dot={false} strokeWidth={2} name="Imbalance Mid Price (EUR/MWh)" hide={lgd0.isHidden('Imbalance Mid Price (EUR/MWh)')} isAnimationActive={false} />
-            {compareEnabled && <Line type="monotone" dataKey="prevMidPrice" stroke={COLORS.amber} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.45} name="Prev. period" hide={lgd0.isHidden('Prev. period')} isAnimationActive={false} />}
+            <Line type="monotone" dataKey="midPrice" stroke={COLORS.black} dot={false} strokeWidth={2} name="Imbalance Mid Price (EUR/MWh)" hide={lgd0.isHidden('Imbalance Mid Price (EUR/MWh)')} isAnimationActive={false} />
+            {compareEnabled && <Line type="monotone" dataKey="prevMidPrice" stroke={COLORS.textMuted} dot={false} strokeWidth={1.5} strokeDasharray="4 2" strokeOpacity={0.6} name="Prev. period" hide={lgd0.isHidden('Prev. period')} isAnimationActive={false} />}
             {zoom0.refArea.left && zoom0.refArea.right && (
-              <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea x1={zoom0.refArea.left} x2={zoom0.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </LineChart>
         </ResponsiveContainer>
@@ -228,10 +228,10 @@ export default function BalancingSection({
       <ChartWrap title="System Balance Delta NL (MW)" source="TenneT" isMock={isMockDelta} isLoading={balanceDeltaLoading} controls={deltaResControls} zoomed={zoom1.isZoomed} onReset={zoom1.reset}>
         <ResponsiveContainer width="100%" height={180}>
           <BarChart data={zoom1.displayData} {...chartProps} {...zoom1.handlers} style={{ cursor: 'crosshair', userSelect: 'none' }} barCategoryGap="1%">
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-            <XAxis dataKey="timestamp" tickFormatter={v => fmtDeltaTs(v, deltaRes)} tick={{ fill: '#94a3b8', fontSize: 11 }} minTickGap={60} />
-            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} width={52} tickFormatter={v => Math.round(v)} />
-            <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="4 2" strokeWidth={1.5} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#DDDDDD" />
+            <XAxis dataKey="timestamp" tickFormatter={v => fmtDeltaTs(v, deltaRes)} tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} minTickGap={60} />
+            <YAxis tick={{ fill: '#5A5A5A', fontSize: 11, fontFamily: 'var(--font-mono)' }} width={52} tickFormatter={v => Math.round(v)} />
+            <ReferenceLine y={0} stroke={COLORS.brick} strokeDasharray="4 2" strokeWidth={1.5} />
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null
@@ -240,7 +240,7 @@ export default function BalancingSection({
                   <div className="chart-tooltip">
                     <p className="chart-tooltip-label">{fmtDeltaTs(label, deltaRes)}</p>
                     <div className="chart-tooltip-row">
-                      <span className="chart-tooltip-dot" style={{ background: val >= 0 ? '#4ade80' : '#f87171' }} />
+                      <span className="chart-tooltip-dot" style={{ background: val >= 0 ? COLORS.teal : COLORS.brick }} />
                       <span className="chart-tooltip-name">Balance Delta</span>
                       <span className="chart-tooltip-val">{val != null ? `${val > 0 ? '+' : ''}${Math.round(val)} MW` : '—'}</span>
                     </div>
@@ -259,14 +259,14 @@ export default function BalancingSection({
               {(zoom1.displayData || []).map((entry, index) => (
                 <Cell
                   key={index}
-                  fill={entry.balanceDelta >= 0 ? '#4ade8066' : '#f8717166'}
-                  stroke={entry.balanceDelta >= 0 ? '#4ade80' : '#f87171'}
+                  fill={entry.balanceDelta >= 0 ? `${COLORS.teal}66` : `${COLORS.brick}66`}
+                  stroke={entry.balanceDelta >= 0 ? COLORS.teal : COLORS.brick}
                   strokeWidth={0.5}
                 />
               ))}
             </Bar>
             {zoom1.refArea.left && zoom1.refArea.right && (
-              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill="#6366f1" fillOpacity={0.15} stroke="#6366f1" strokeOpacity={0.4} />
+              <ReferenceArea x1={zoom1.refArea.left} x2={zoom1.refArea.right} fill={COLORS.textMuted} fillOpacity={0.1} stroke={COLORS.textMuted} strokeOpacity={0.4} />
             )}
           </BarChart>
         </ResponsiveContainer>
