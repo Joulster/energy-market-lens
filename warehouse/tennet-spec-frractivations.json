@@ -1,0 +1,481 @@
+{
+  "info": {
+    "title": "Aether - Frequency Restoration Reserve Activations",
+    "version": "1.5.0",
+    "description": "Volumes of activated balancing energy, settled reserve and emergency energy. **note: This API is subject to rate limiting**\n\nThe following rate limits apply:\n\n**Production and Acceptance**\n- Maximum requests per second: 1\n- Maximum requests per minute: 60\n- Maximum requests per day: 1500\n\nExceeding these limits may result in temporary blocking of your API keys. Please ensure your usage adheres to these limits to maintain uninterrupted access."
+  },
+  "paths": {
+    "/publications/v1/frequency-restoration-reserve-activations": {
+      "get": {
+        "tags": [
+          "Frequency Restoration Reserve Activations"
+        ],
+        "summary": "Get Frequency Restoration Reserve Activations data by timeframe",
+        "security": [
+          {
+            "apikey": [
+              "read:data"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "$ref": "#/components/schemas/response_csv"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/response_json"
+                    },
+                    {
+                      "$ref": "#/components/schemas/no-data"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Successful operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-apikey"
+                }
+              }
+            },
+            "description": "No valid API key found in request"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-method"
+                }
+              }
+            },
+            "description": "This Method is not allowed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-missing-information"
+                }
+              }
+            },
+            "description": "Missing information, e.g. date range or type."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-rate-limit"
+                }
+              }
+            },
+            "description": "Rate Limit Reached"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-gateway-timeout"
+                }
+              }
+            },
+            "description": "Gateway Timeout"
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "schema": {
+              "type": "string",
+              "example": "13-01-2025 00:00:00"
+            },
+            "required": true,
+            "description": "The start date and time of the requested time frame."
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "schema": {
+              "type": "string",
+              "example": "14-01-2025 00:00:00"
+            },
+            "required": true,
+            "description": "The end date and time of the requested time frame, maximum range is 1 day."
+          },
+          {
+            "in": "header",
+            "name": "Accept",
+            "schema": {
+              "type": "string",
+              "example": "application/json"
+            },
+            "required": true,
+            "description": "The response type is the format of the returned answer. Allowed values are: application/json, application/xml, text/csv, application/xlsx"
+          }
+        ],
+        "description": "Use this method to retrieve the data on frequency restoration reserve activations used in a certain timeframe.",
+        "operationId": "request_frequency_restoration_reserve_activations"
+      }
+    }
+  },
+  "openapi": "3.0.3",
+  "servers": [
+    {
+      "url": "https://{environment}.tennet.eu",
+      "variables": {
+        "environment": {
+          "enum": [
+            "api",
+            "api.acc"
+          ],
+          "default": "api"
+        }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "no-data": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "No data found"
+          }
+        }
+      },
+      "Response": {
+        "xml": {
+          "name": "Response"
+        },
+        "type": "object",
+        "properties": {
+          "TimeSeries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mRID": {
+                  "type": "integer",
+                  "example": 1
+                },
+                "Period": {
+                  "type": "object",
+                  "properties": {
+                    "Points": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "isp": {
+                            "type": "string",
+                            "example": "1"
+                          },
+                          "aFRR_up": {
+                            "type": "string",
+                            "example": "77"
+                          },
+                          "aFRR_down": {
+                            "type": "string",
+                            "example": "161"
+                          },
+                          "total_volume": {
+                            "type": "string",
+                            "example": "424"
+                          },
+                          "mfrrda_volume_up": {
+                            "type": "string",
+                            "example": "190"
+                          },
+                          "timeInterval_end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2025-01-13T00:15"
+                          },
+                          "mfrrda_volume_down": {
+                            "type": "string",
+                            "example": "165"
+                          },
+                          "timeInterval_start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2025-01-13T00:00"
+                          },
+                          "absolute_total_volume": {
+                            "type": "string",
+                            "example": "253"
+                          }
+                        }
+                      }
+                    },
+                    "timeInterval": {
+                      "type": "object",
+                      "properties": {
+                        "end": {
+                          "type": "string",
+                          "format": "date-time",
+                          "example": "2025-01-14T00:00"
+                        },
+                        "start": {
+                          "type": "string",
+                          "format": "date-time",
+                          "example": "2025-01-13T00:00"
+                        }
+                      }
+                    }
+                  }
+                },
+                "quantity_Measurement_Unit_name": {
+                  "type": "string",
+                  "example": "kWh"
+                }
+              }
+            }
+          },
+          "informationType": {
+            "type": "string",
+            "example": "FREQUENCY_RESTORATION_RESERVE_ACTIVATIONS"
+          },
+          "period.timeInterval": {
+            "type": "object",
+            "properties": {
+              "end": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-01-14T00:00"
+              },
+              "start": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-01-13T00:00"
+              }
+            }
+          }
+        }
+      },
+      "error-apikey": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "No valid API key found in request"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "error-method": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "User defined resource error or wrong HTTP Method used, for details please see HTTP status code"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "response_csv": {
+        "type": "object",
+        "example": "Timeinterval Start Loc,Timeinterval End Loc,Isp,Quantity Measurement Unit Name,Afrr Down,Afrr Up,Incident Reserve Down,Incident Reserve Up,Absolute Total Volume,Total Volume\n2025-01-013T00:00,2025-01-013T00:15,1,kWh,0,0,0,0,0,0\n2025-01-013T00:15,2025-01-013T00:30,2,kWh,0,0,0,0,0,0\n"
+      },
+      "response_json": {
+        "type": "object",
+        "properties": {
+          "Response": {
+            "type": "object",
+            "properties": {
+              "TimeSeries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "mRID": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "Period": {
+                      "type": "object",
+                      "properties": {
+                        "Points": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "isp": {
+                                "type": "string",
+                                "example": "1"
+                              },
+                              "aFRR_up": {
+                                "type": "string",
+                                "example": "77"
+                              },
+                              "aFRR_down": {
+                                "type": "string",
+                                "example": "161"
+                              },
+                              "total_volume": {
+                                "type": "string",
+                                "example": "424"
+                              },
+                              "mfrrda_volume_up": {
+                                "type": "string",
+                                "example": "190"
+                              },
+                              "timeInterval_end": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2025-01-13T00:15"
+                              },
+                              "mfrrda_volume_down": {
+                                "type": "string",
+                                "example": "165"
+                              },
+                              "timeInterval_start": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2025-01-13T00:00"
+                              },
+                              "absolute_total_volume": {
+                                "type": "string",
+                                "example": "253"
+                              }
+                            }
+                          }
+                        },
+                        "timeInterval": {
+                          "type": "object",
+                          "properties": {
+                            "end": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2025-01-14T00:00"
+                            },
+                            "start": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2025-01-13T00:00"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "quantity_Measurement_Unit_name": {
+                      "type": "string",
+                      "example": "kWh"
+                    }
+                  }
+                }
+              },
+              "informationType": {
+                "type": "string",
+                "example": "FREQUENCY_RESTORATION_RESERVE_ACTIVATIONS"
+              },
+              "period.timeInterval": {
+                "type": "object",
+                "properties": {
+                  "end": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-14T00:00"
+                  },
+                  "start": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-13T00:00"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "error-rate-limit": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "Rate limit exceeded"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "error-gateway-timeout": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "Gateway Timeout"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "error-missing-information": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "Invalid date format! Date format must be \"dd-mm-yyyy hh24:mi:ss\""
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "apikey": {
+        "in": "header",
+        "name": "apikey",
+        "type": "apiKey"
+      }
+    }
+  }
+}

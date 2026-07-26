@@ -183,17 +183,17 @@ All non-auth `GET` routes serve `dist/index.html`; the catch-all redirects to `/
 
 - **Base URL:** `https://api.tennet.eu/publications/v1`
 - **Auth:** `apikey` header with `TENNET_API_KEY`
-- **Date format:** API expects `DD-MM-YYYY 00:00:00`; uses exclusive end date (add 1 day to the inclusive endDate)
-- **Rate limiting:** chunked into 1-month batches (API max range)
 - **Retry logic:** 3 attempts with exponential backoff; retries on 429/500/502/503/504 and timeouts
-- **Response:** 15-minute ISP resolution with CET local timestamps (`timeInterval_start`)
+- **Two request helpers** (different endpoints have incompatible date formats and chunking):
+  - `tennetRequest(endpoint, dateFrom, dateTo)` — for settlement-prices; date format `DD-MM-YYYY 00:00:00` (CET); **adds +1 day** to `dateTo` (exclusive end); monthly chunks (API max range = 1 month)
+  - `tennetRequestRaw(endpoint, dateFrom, dateTo)` — for balance-delta-high-res and merit-order-list; accepts pre-formatted UTC datetime strings `DD-MM-YYYY HH:MM:SS`; **no +1 day**; caller controls chunking
 
 **Fetchers:**
-- **`fetchImbalancePrices`** — settlement-prices → `{ daily, rawPoints }`. daily = daily avg mid price; rawPoints = 15-min `{ timestamp, midPrice }`. Cache salt `v2|`.
-- **`fetchAFRRData`** — settlement-prices → raw 15-min `{ timestamp, afrrUpEnergyPrice, afrrDownEnergyPrice }` (dispatch_up / dispatch_down)
-- **`fetchBalanceDelta`** — balance-delta endpoint → `[{ timestamp, balanceDelta (MW) }]`. Positive = system long, negative = system short. 15-min resolution. Cache: 1h/24h TTL.
-- **`fetchFRRActivations`** — frr-activations endpoint → `[{ timestamp, activatedUpMw, activatedDownMw, settledReserveMw, emergencyEnergyMw }]`. 15-min resolution. Cache: 1h/24h TTL.
-- **`fetchMeritOrderForDate(date)`** — merit-order endpoint (single day) → `{ date, ptus: [{ ptu: 1-96, curve: [{ cumVolume, price }] }] }`. Bids sorted ascending by price (supply curve). PTU 1 = 00:00, PTU 96 = 23:45. Cache: Redis key `merit-order:{YYYY-MM-DD}`, 7-day TTL.
+- **`fetchImbalancePrices`** — `settlement-prices` → `{ daily, rawPoints }`. daily = daily avg mid price; rawPoints = 15-min `{ timestamp, midPrice }` (CET). Cache salt `v2|`.
+- **`fetchAFRRData`** — `settlement-prices` → raw 15-min `{ timestamp, afrrUpEnergyPrice, afrrDownEnergyPrice }` (dispatch_up / dispatch_down, CET)
+- **`fetchBalanceDelta`** — `balance-delta-high-res` → `[{ timestamp, balanceDelta (MW) }]`. Balance delta = Σ `power_X_in` − Σ `power_X_out` (X ∈ afrr, igcc, picasso, mari, mfrrda). UTC timestamps. Chunked into 4-hour UTC windows (`fourHourChunks`); capped at 8 chunks (~32 h) due to 8 req/day rate limit. Positive = system long, negative = system short. Cache: 1h/24h TTL.
+- **`fetchFRRActivations`** — `frequency-restoration-reserve-activations` → `[{ timestamp, activatedUpMw, activatedDownMw }]`. Up = `aFRR_up + mfrrda_volume_up`; Down = `aFRR_down + mfrrda_volume_down`. Response: `ts.Period.Points[]` (Period = object, capital-P). Day-by-day chunks (`dayChunks`), max 1 day per request. Cache: 1h/24h TTL.
+- **`fetchMeritOrderForDate(date)`** — `merit-order-list` (single day) → `{ date, ptus: [{ ptu: 1-96, curve: [{ cumVolume, price }] }] }`. Makes 24 hourly requests per day (max 1 hour range); merges all `Response.TimeSeries[]`; `pt.Thresholds[]` → sorted by `price_up` ascending, accumulated `capacity_threshold` = cumulative volume. PTU 1 = 00:00, PTU 96 = 23:45. Cache: Redis key `merit-order:{YYYY-MM-DD}`, 7-day TTL.
 
 ### `/api/afrr` route
 
@@ -210,13 +210,17 @@ Cache salt is versioned (currently `v10|`) — bump to bust Redis when the respo
 
 ### `/api/balance-delta` route
 
-Returns: `[{ timestamp: 'YYYY-MM-DDTHH:MM:SS' (CET), balanceDelta: number (MW) }]`
+Returns: `[{ timestamp: 'YYYY-MM-DDTHH:MM:SS' (UTC), balanceDelta: number (MW) }]`
+
+Source: TenneT `balance-delta-high-res`. Rate-limited to 8 req/day — ranges > ~32 h are automatically trimmed to the most recent 32 hours.
 
 Cache namespace: `market:balance-delta`. TTL: 1h for ranges including today, 24h for historical.
 
 ### `/api/frr-activations` route
 
-Returns: `[{ timestamp, activatedUpMw, activatedDownMw, settledReserveMw, emergencyEnergyMw }]`
+Returns: `[{ timestamp, activatedUpMw, activatedDownMw }]`
+
+Source: TenneT `frequency-restoration-reserve-activations`. `activatedUpMw = aFRR_up + mfrrda_volume_up`; similarly for down.
 
 Cache namespace: `market:frr-activations`. TTL: 1h/24h.
 

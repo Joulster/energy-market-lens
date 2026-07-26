@@ -1,0 +1,652 @@
+{
+  "info": {
+    "title": "Aether - Balance Delta High resolution",
+    "version": "1.5.0",
+    "description": "**Use this as a standard method to retrieve the balance delta high res data**\n\nThe following rate limits apply:\n\n**Production**\n- Maximum requests per second: 1\n- Maximum requests per minute: 10\n\n**Acceptance**\n- Maximum requests per second: 1\n- Maximum requests per minute: 10\n\n**Recommended approach:**\n- •  Use the \"/publications/v1/balance-delta-high-res/latest\" endpoint.\n- •  Poll the endpoint five times per minute, one second after each data-refresh event on the 12th second\n      (for example: 00:00:13, 00:00:25, 00:00:37, 00:00:49, and 00:01:01).\n- •  Responses return the most recent available 30 minutes, subject to a configurable delay imposed by TenneT.\n- •  All timestamps are provided in UTC.\n- •  Response format: JSON.\n\n\n**Use this as a back up method. The maximum period is 4 hours.**\n\nThe following rate limits apply:\n\n**Production**\n- Maximum requests per day: 8\n\n**Acceptance**\n- Maximum requests per day: 8\n\n**Back-up approach to retrieve missed data:**\n- •  Use the \"/publications/v1/balance-delta-high-res\" endpoint.\n- •  Poll the endpoint max. 8 times per 24H starting from 00:00 UTC with a maximum period of 4 hours. In case you would like to compile a complete data file of 24 hours, we advise to call for 00:00 – 04:00; 04:00 – 08:00; etc.\n- •  Time stamps are provided in UTC or Local depending on the used parameter.\n- •  Response format: JSON, CSV, XML, XSLX depending on the used parameter.\n\n**Backfilling your historical dataset (large quantities of data):**\n- An option will be available on [https://www.tennet.eu/nl-en/grids-and-markets/transparency-data-netherlands/download-page-transparency](https://www.tennet.eu/nl-en/grids-and-markets/transparency-data-netherlands/download-page-transparency) to manually download your large dataset at once (up to 100 MB)\n\n**note: This API is subject to rate limiting see endpoints**\n- Exceeding these limits may result in temporary blocking of your API keys. Please ensure your usage adheres to these limits to maintain uninterrupted access.\n"
+  },
+  "paths": {
+    "/publications/v1/balance-delta-high-res": {
+      "get": {
+        "tags": [
+          "Balance Delta High Res"
+        ],
+        "summary": "Get Balance Delta high res data by timeframe",
+        "security": [
+          {
+            "apikey": [
+              "read:data"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "$ref": "#/components/schemas/response_csv"
+                }
+              },
+              "application/xml": {
+                "schema": {
+                  "$ref": "#/components/schemas/Response"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/response_json"
+                    },
+                    {
+                      "$ref": "#/components/schemas/no-data"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Successful operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-apikey"
+                }
+              }
+            },
+            "description": "No valid API key found in request"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-method"
+                }
+              }
+            },
+            "description": "This Method is not allowed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-missing-information"
+                }
+              }
+            },
+            "description": "Missing information, e.g. date range or type."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-rate-limit"
+                }
+              }
+            },
+            "description": "Rate Limit Reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-maintenance"
+                }
+              }
+            },
+            "description": "This service is temporarily unavailable due to maintenance."
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "date_from",
+            "schema": {
+              "type": "string",
+              "example": "13-01-2025 00:00:00"
+            },
+            "required": true,
+            "description": "The start date and time of the requested time frame. Use datetime with Z for utc."
+          },
+          {
+            "in": "query",
+            "name": "date_to",
+            "schema": {
+              "type": "string",
+              "example": "13-01-2025 00:04:00"
+            },
+            "required": true,
+            "description": "The end date and time of the requested time frame, maximum range is 1 day. Use same timezone as date from."
+          },
+          {
+            "in": "header",
+            "name": "Accept",
+            "schema": {
+              "enum": [
+                "application/json",
+                "application/xml",
+                "text/csv",
+                "application/xlsx"
+              ],
+              "type": "string",
+              "default": "application/json",
+              "example": "application/json"
+            },
+            "required": true,
+            "description": "The response type is the format of the returned answer."
+          }
+        ],
+        "description": "**Use this as a back up method. The maximum period is 4 hours.**\n\nThe following rate limits apply:\n\n**Production**\n  - Maximum requests per day: 8\n\n**Acceptance**\n - Maximum requests per day: 8\n",
+        "operationId": "request_balance_delta_high_res"
+      }
+    },
+    "/publications/v1/balance-delta-high-res/latest": {
+      "get": {
+        "tags": [
+          "Balance Delta High Res"
+        ],
+        "summary": "Get Balance Delta high res latest data",
+        "security": [
+          {
+            "apikey": [
+              "read:data"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/response_json"
+                    },
+                    {
+                      "$ref": "#/components/schemas/no-data"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Successful operation."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-apikey"
+                }
+              }
+            },
+            "description": "No valid API key found in request"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-method"
+                }
+              }
+            },
+            "description": "This Method is not allowed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-missing-information"
+                }
+              }
+            },
+            "description": "Missing information, e.g. date range or type."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-rate-limit"
+                }
+              }
+            },
+            "description": "Rate Limit Reached"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/error-maintenance"
+                }
+              }
+            },
+            "description": "This service is temporarily unavailable due to maintenance."
+          }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Accept",
+            "schema": {
+              "enum": [
+                "application/json"
+              ],
+              "type": "string",
+              "default": "application/json",
+              "example": "application/json"
+            },
+            "required": true,
+            "description": "The response type is the format of the returned answer."
+          }
+        ],
+        "description": "**Use this as a standard method to retrieve the balance delta high res data**\n\nThe following rate limits apply:\n\n**Production**\n  - Maximum requests per second: 1\n  - Maximum requests per minute: 10\n\n**Acceptance**\n - Maximum requests per second: 1\n - Maximum requests per minute: 10\n",
+        "operationId": "request_get_latest"
+      }
+    }
+  },
+  "openapi": "3.0.3",
+  "servers": [
+    {
+      "url": "https://{environment}.tennet.eu",
+      "variables": {
+        "environment": {
+          "enum": [
+            "api",
+            "api.acc"
+          ],
+          "default": "api"
+        }
+      }
+    }
+  ],
+  "components": {
+    "schemas": {
+      "no-data": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "No data found"
+          }
+        }
+      },
+      "Response": {
+        "xml": {
+          "name": "Response"
+        },
+        "type": "object",
+        "properties": {
+          "TimeSeries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mRID": {
+                  "type": "integer",
+                  "example": 1
+                },
+                "Period": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "points": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "sequence": {
+                              "type": "string",
+                              "example": "1"
+                            },
+                            "mid_price": {
+                              "type": "string",
+                              "example": "22.69"
+                            },
+                            "power_afrr_in": {
+                              "type": "string",
+                              "example": "29.0"
+                            },
+                            "power_igcc_in": {
+                              "type": "string",
+                              "example": "0.0"
+                            },
+                            "power_mari_in": {
+                              "type": "string",
+                              "example": "1.0"
+                            },
+                            "power_afrr_out": {
+                              "type": "string",
+                              "example": "163.0"
+                            },
+                            "power_igcc_out": {
+                              "type": "string",
+                              "example": "1.0"
+                            },
+                            "power_mari_out": {
+                              "type": "string",
+                              "example": "4.0"
+                            },
+                            "power_mfrrda_in": {
+                              "type": "string",
+                              "example": "5.0"
+                            },
+                            "power_mfrrda_out": {
+                              "type": "string",
+                              "example": "2.0"
+                            },
+                            "power_picasso_in": {
+                              "type": "string",
+                              "example": "2.0"
+                            },
+                            "timeInterval_end": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2025-01-13T00:15"
+                            },
+                            "power_picasso_out": {
+                              "type": "string",
+                              "example": "6.0"
+                            },
+                            "timeInterval_start": {
+                              "type": "string",
+                              "format": "date-time",
+                              "example": "2025-01-13T00:00"
+                            },
+                            "max_upw_regulation_price": {
+                              "type": "string",
+                              "example": "0.0"
+                            },
+                            "min_downw_regulation_price": {
+                              "type": "string",
+                              "example": "-182.53"
+                            }
+                          }
+                        }
+                      },
+                      "timeInterval": {
+                        "type": "object",
+                        "properties": {
+                          "end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2025-01-14T00:00"
+                          },
+                          "start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "example": "2025-01-13T00:00"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "currency_Unit.name": {
+                  "type": "string",
+                  "example": "EUR"
+                },
+                "quantity_Measurement_Unit.name": {
+                  "type": "string",
+                  "example": "MAW"
+                }
+              }
+            }
+          },
+          "informationType": {
+            "type": "string",
+            "example": "BALANCE_DELTA_HIGH_RES"
+          },
+          "period.timeInterval": {
+            "type": "object",
+            "properties": {
+              "end": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-01-14T00:00"
+              },
+              "start": {
+                "type": "string",
+                "format": "date-time",
+                "example": "2025-01-13T00:00"
+              }
+            }
+          }
+        }
+      },
+      "error-apikey": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "No valid API key found in request"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "error-method": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "User defined resource error or wrong HTTP Method used, for details please see HTTP status code"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "response_csv": {
+        "type": "object",
+        "example": "Timeinterval Start Loc,Timeinterval End Loc,Isp,Power In Activated Afrr,Power Out Activated Afrr,Power In Igcc,Power Out Igcc,Power In Mfrrda,Power Out Mfrrda,Highest Upward Regulation Price,Lowest Downward Regulation Price,Mid Price,Picasso Contribution Power In,Picasso Contribution Power Out,Mari Contribution Power In, Mari Contribution Power Out\n2025-01-13T00:00,2025-01-13T00:01,1,0.0,408.0,0.0,273.0,0.0,0.0,,-313.50,94.36,2.0,6.0,1.0,4.0\n2025-01-13T00:01,2025-01-13T00:02,2,0.0,322.0,0.0,207.0,0.0,0.0,,-313.50,94.36,2.0,6.0,1.0,4.0\n"
+      },
+      "response_json": {
+        "type": "object",
+        "properties": {
+          "Response": {
+            "type": "object",
+            "properties": {
+              "TimeSeries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "mRID": {
+                      "type": "integer",
+                      "example": 1
+                    },
+                    "Period": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "points": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "sequence": {
+                                  "type": "string",
+                                  "example": "1"
+                                },
+                                "mid_price": {
+                                  "type": "string",
+                                  "example": "22.69"
+                                },
+                                "power_afrr_in": {
+                                  "type": "string",
+                                  "example": "29.0"
+                                },
+                                "power_igcc_in": {
+                                  "type": "string",
+                                  "example": "0.0"
+                                },
+                                "power_mari_in": {
+                                  "type": "string",
+                                  "example": "1.0"
+                                },
+                                "power_afrr_out": {
+                                  "type": "string",
+                                  "example": "163.0"
+                                },
+                                "power_igcc_out": {
+                                  "type": "string",
+                                  "example": "1.0"
+                                },
+                                "power_mari_out": {
+                                  "type": "string",
+                                  "example": "4.0"
+                                },
+                                "power_mfrrda_in": {
+                                  "type": "string",
+                                  "example": "5.0"
+                                },
+                                "power_mfrrda_out": {
+                                  "type": "string",
+                                  "example": "2.0"
+                                },
+                                "power_picasso_in": {
+                                  "type": "string",
+                                  "example": "2.0"
+                                },
+                                "timeInterval_end": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "example": "2025-01-13T00:00:12"
+                                },
+                                "power_picasso_out": {
+                                  "type": "string",
+                                  "example": "6.0"
+                                },
+                                "timeInterval_start": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "example": "2025-01-13T00:00:00"
+                                },
+                                "max_upw_regulation_price": {
+                                  "type": "string",
+                                  "example": "0.0"
+                                },
+                                "min_downw_regulation_price": {
+                                  "type": "string",
+                                  "example": "-182.53"
+                                }
+                              }
+                            }
+                          },
+                          "timeInterval": {
+                            "type": "object",
+                            "properties": {
+                              "end": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2025-01-13T00:30:00"
+                              },
+                              "start": {
+                                "type": "string",
+                                "format": "date-time",
+                                "example": "2025-01-13T00:00:00"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "currency_Unit_name": {
+                      "type": "string",
+                      "example": "EUR"
+                    },
+                    "quantity_Measurement_Unit_name": {
+                      "type": "string",
+                      "example": "MAW"
+                    }
+                  }
+                }
+              },
+              "informationType": {
+                "type": "string",
+                "example": "BALANCE_DELTA_HIGH_RES"
+              },
+              "period.timeInterval": {
+                "type": "object",
+                "properties": {
+                  "end": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-13T00:30:00"
+                  },
+                  "start": {
+                    "type": "string",
+                    "format": "date-time",
+                    "example": "2025-01-13T00:00:00"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "error-rate-limit": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "Rate limit exceeded"
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      },
+      "error-maintenance": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "This service is temporarily unavailable due to maintenance."
+          }
+        }
+      },
+      "error-missing-information": {
+        "type": "object",
+        "properties": {
+          "Error_id": {
+            "type": "string",
+            "example": "6a7fa720-c20b-4ca4-a05f-f4280a26cd78"
+          },
+          "Error_message": {
+            "type": "string",
+            "example": "Invalid date format! Date format must be \"dd-mm-yyyy hh24:mi:ss\""
+          },
+          "Error_date_time": {
+            "type": "string",
+            "example": "2025-01-13T07:05:23+0000"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "apikey": {
+        "in": "header",
+        "name": "apikey",
+        "type": "apiKey"
+      }
+    }
+  }
+}
